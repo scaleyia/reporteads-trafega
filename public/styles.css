@@ -38,6 +38,7 @@ header.topbar {
 }
 header.topbar img { height: 34px; }
 header.topbar .sub { font-size: 12px; color: var(--muted); }
+header.topbar .topbar-right { display: flex; align-items: center; gap: 14px; }
 
 .wrap { max-width: 980px; margin: 28px auto; padding: 0 20px 80px; }
 

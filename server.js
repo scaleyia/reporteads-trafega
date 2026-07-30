@@ -9,6 +9,15 @@ import { extractFromPrints, listModels, identifyImage } from './lib/extract.js';
 import { buildHtml, reportFilename } from './lib/report.js';
 import { htmlToPdf, closeBrowser } from './lib/pdf.js';
 import { readSettings, writeSettings, clearApiKey, getApiKey, getModel, maskKey, READONLY_FS } from './lib/settings.js';
+import {
+  requireAuth,
+  checkCredentials,
+  createSession,
+  sessionCookie,
+  clearCookie,
+  readSession,
+  USING_DEFAULT_CREDENTIALS,
+} from './lib/auth.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -16,6 +25,31 @@ const CLIENTS_FILE = path.join(HERE, 'data', 'clients.json');
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
+
+// ---------- Autenticação (login por e-mail + senha) ----------
+// Protege tudo, exceto a tela de login e seus recursos. Precisa vir ANTES do static.
+app.post('/api/login', (req, res) => {
+  const { email, password } = req.body || {};
+  if (!checkCredentials(email, password)) {
+    return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+  }
+  res.setHeader('Set-Cookie', sessionCookie(createSession()));
+  res.json({ ok: true });
+});
+
+app.post('/api/logout', (_req, res) => {
+  res.setHeader('Set-Cookie', clearCookie());
+  res.json({ ok: true });
+});
+
+app.get('/api/me', (req, res) => {
+  const s = readSession(req);
+  if (!s) return res.status(401).json({ authenticated: false });
+  res.json({ authenticated: true, email: s.email });
+});
+
+app.use(requireAuth);
+
 app.use(express.static(path.join(HERE, 'public')));
 app.use('/assets', express.static(path.join(HERE, 'assets')));
 
@@ -28,6 +62,14 @@ const upload = multer({
 if (!getApiKey()) {
   console.warn(
     '\n⚠️  Sem chave da OpenAI ainda. Cole sua API key direto na interface (painel "Configurações").\n'
+  );
+}
+
+// ---- Aviso sobre credenciais de login padrão ----
+if (USING_DEFAULT_CREDENTIALS) {
+  console.warn(
+    '\n🔑 Login usando credenciais PADRÃO (admin@lastone.com / admin).' +
+    '\n   Defina AUTH_EMAIL, AUTH_PASSWORD e AUTH_SECRET no .env para produção.\n'
   );
 }
 

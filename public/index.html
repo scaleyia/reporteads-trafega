@@ -9,7 +9,10 @@
 <body>
   <header class="topbar">
     <img src="/assets/logo.png" alt="LastOne" />
-    <span class="sub">Gerador de Relatórios · Google Ads</span>
+    <div class="topbar-right">
+      <span class="sub">Gerador de Relatórios · Google Ads</span>
+      <button class="btn btn-ghost btn-sm" id="logoutBtn" title="Encerrar sessão">Sair</button>
+    </div>
   </header>
 
   <div class="wrap">
@@ -297,5 +300,11 @@
   <div class="toast" id="toast"></div>
   <script src="/vendor/jszip.min.js"></script>
   <script src="/app.js"></script>
+  <script>
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+      window.location.href = '/login.html';
+    });
+  </script>
 </body>
 </html>

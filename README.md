@@ -17,6 +17,23 @@ Abra **http://localhost:3000** no navegador.
 
 > `npm run dev` reinicia o servidor automaticamente ao editar arquivos.
 
+### Login
+
+O sistema é protegido por login (e-mail + senha). Credenciais **padrão de fábrica**:
+
+- **E-mail:** `admin@lastone.com`
+- **Senha:** `admin`
+
+Para trocar, defina no `.env` (ou nas env vars do Vercel):
+
+```
+AUTH_EMAIL=voce@empresa.com
+AUTH_PASSWORD=uma-senha-forte
+AUTH_SECRET=<segredo longo e aleatório>   # assina o cookie de sessão
+```
+
+> Gere um segredo com: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. A sessão dura 7 dias; use o botão **Sair** no topo para encerrar.
+
 ## 2. Configurar a IA (direto na interface)
 
 No painel **⚙ Configurações da IA** no topo da página:
@@ -36,6 +53,8 @@ O projeto já está preparado para serverless (`api/index.js` + `vercel.json`, P
 2. Em **Settings → Environment Variables**, cadastre:
    - `OPENAI_API_KEY` = sua chave `sk-...` (**obrigatória**)
    - `OPENAI_MODEL` = `gpt-5.4-mini` (opcional)
+   - `AUTH_EMAIL` / `AUTH_PASSWORD` = credenciais de login (**recomendado** — senão fica no padrão `admin@lastone.com` / `admin`)
+   - `AUTH_SECRET` = segredo longo e aleatório que assina a sessão (**recomendado** em produção)
 3. **Deploy.** Pronto.
 
 Diferenças no Vercel (disco é somente-leitura):
