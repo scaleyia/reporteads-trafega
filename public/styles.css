@@ -85,7 +85,7 @@ label.field > span {
   margin-bottom: 5px;
 }
 
-input[type="text"], input[type="number"], select, textarea {
+input[type="text"], input[type="email"], input[type="password"], input[type="number"], select, textarea {
   width: 100%;
   padding: 9px 11px;
   border: 1px solid var(--line);
