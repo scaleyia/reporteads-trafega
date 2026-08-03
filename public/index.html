@@ -11,18 +11,20 @@
     <img src="/assets/logo.png" alt="LastOne" />
     <div class="topbar-right">
       <span class="sub">Gerador de Relatórios · Google Ads</span>
+      <button class="btn btn-ghost btn-sm" id="profileBtn" title="Perfil e configurações">👤 Perfil</button>
       <button class="btn btn-ghost btn-sm" id="logoutBtn" title="Encerrar sessão">Sair</button>
     </div>
   </header>
 
   <div class="wrap">
 
-    <!-- CONFIGURAÇÕES (chave + modelo) -->
-    <section class="card" id="settingsCard">
+    <!-- PERFIL / CONFIGURAÇÕES (chave + modelo) -->
+    <section class="card hidden" id="settingsCard">
       <div class="step-head">
         <div class="num">⚙</div>
         <h2>Configurações da IA</h2>
         <span class="hint" id="settingsStatus"></span>
+        <button class="btn btn-ghost btn-sm" id="profileBackBtn" style="margin-left:auto;white-space:nowrap;">← Voltar</button>
       </div>
 
       <div class="grid cols-2">
@@ -47,6 +49,9 @@
       </div>
     </section>
 
+    <!-- VISÃO PRINCIPAL -->
+    <div id="mainView">
+
     <!-- ABAS -->
     <div class="tabs">
       <button class="tab active" data-mode="bulk">⚡ Geração em massa</button>
@@ -66,18 +71,16 @@
 
       <div class="grid cols-2">
         <label class="field">
-          <span>Cliente</span>
-          <select id="clienteSelect">
-            <option value="__new">➕ Novo cliente…</option>
-          </select>
-        </label>
-        <label class="field" id="novoClienteWrap">
           <span>Nome da farmácia</span>
           <input type="text" id="clienteNome" placeholder="Ex.: Biothera" />
         </label>
+        <label class="field">
+          <span>Gestor responsável</span>
+          <input type="text" id="gestor" placeholder="Ex.: Gabriel Freire" />
+        </label>
       </div>
 
-      <div class="grid cols-3" style="margin-top:14px;">
+      <div class="grid cols-2" style="margin-top:14px;">
         <label class="field">
           <span>Mês de referência</span>
           <select id="mes"></select>
@@ -85,10 +88,6 @@
         <label class="field">
           <span>Ano</span>
           <input type="number" id="ano" value="2026" />
-        </label>
-        <label class="field">
-          <span>Gestor responsável</span>
-          <input type="text" id="gestor" placeholder="Ex.: Gabriel Freire" />
         </label>
       </div>
 
@@ -100,8 +99,8 @@
             <option value="custom">Período personalizado</option>
           </select>
         </label>
-        <label class="field hidden" id="iPerDeWrap"><span>Do dia</span><input type="number" id="iPerDe" min="1" max="31" value="1" /></label>
-        <label class="field hidden" id="iPerAteWrap"><span>Até o dia</span><input type="number" id="iPerAte" min="1" max="31" value="31" /></label>
+        <label class="field hidden" id="iPerStartWrap"><span>Data inicial</span><input type="text" id="iPerStart" placeholder="dd/mm/aaaa" readonly /></label>
+        <label class="field hidden" id="iPerEndWrap"><span>Data final</span><input type="text" id="iPerEnd" placeholder="dd/mm/aaaa" readonly /></label>
       </div>
       <div class="muted" id="iPerView" style="margin-top:6px;"></div>
 
@@ -110,7 +109,6 @@
           <input type="checkbox" id="semCpc" />
           Cliente sem “custo por conversão” (usar card de Cliques)
         </label>
-        <button class="btn btn-ghost btn-sm" id="saveClientBtn" style="margin-left:auto;">💾 Salvar preferências do cliente</button>
       </div>
     </section>
 
@@ -220,8 +218,8 @@
               <option value="custom">Período personalizado</option>
             </select>
           </label>
-          <label class="field hidden" id="bPerDeWrap"><span>Do dia</span><input type="number" id="bPerDe" min="1" max="31" value="1" /></label>
-          <label class="field hidden" id="bPerAteWrap"><span>Até o dia</span><input type="number" id="bPerAte" min="1" max="31" value="31" /></label>
+          <label class="field hidden" id="bPerStartWrap"><span>Data inicial</span><input type="text" id="bPerStart" placeholder="dd/mm/aaaa" readonly /></label>
+          <label class="field hidden" id="bPerEndWrap"><span>Data final</span><input type="text" id="bPerEnd" placeholder="dd/mm/aaaa" readonly /></label>
         </div>
         <div class="muted" id="bPerView" style="margin-top:6px;"></div>
       </section>
@@ -294,6 +292,8 @@
       </section>
 
     </div><!-- /modeBulk -->
+
+    </div><!-- /mainView -->
 
   </div>
 

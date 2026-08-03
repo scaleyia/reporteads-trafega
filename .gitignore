@@ -5,3 +5,5 @@ data/settings.json
 *.log
 _tmp/
 .DS_Store
+graphify-out/
+.graphifyignore

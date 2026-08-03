@@ -18,40 +18,207 @@ const el = (tag, props = {}, children = []) => {
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-// Monta a string do período: "1 a 31 de Maio de 2026" (mês) ou "13 a 31 de Maio de 2026" (custom).
-function computePeriodo(mesName, ano, mode, de, ate) {
-  const mi = MESES.indexOf(mesName);
-  const y = parseInt(ano, 10) || new Date().getFullYear();
-  const last = mi >= 0 ? new Date(y, mi + 1, 0).getDate() : 31;
-  if (mode === 'custom') {
-    let d = Math.max(1, Math.min(31, parseInt(de, 10) || 1));
-    let a = Math.max(d, Math.min(31, parseInt(ate, 10) || last));
-    return `${d} a ${a} de ${mesName} de ${y}`;
-  }
-  return `1 a ${last} de ${mesName} de ${y}`;
+// Nº de dias do mês (índice 0-11) num dado ano.
+function diasNoMes(mi, y) {
+  return mi >= 0 ? new Date(y, mi + 1, 0).getDate() : 31;
 }
 
-// Liga um controle de período (mode + dias) e mantém um preview atualizado.
-// Retorna uma função getter que devolve a string atual do período.
-function setupPeriodo({ modeId, deWrapId, ateWrapId, deId, ateId, viewId, mesId, anoId, onChange }) {
-  const get = () =>
-    computePeriodo($(mesId).value, $(anoId).value, $(modeId).value, $(deId).value, $(ateId).value);
+// "2026-08-03" -> {d:3, m:7, y:2026} (sem fuso: parse manual)
+function parseISO(iso) {
+  const [y, m, d] = String(iso || '').split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return { d, m: m - 1, y };
+}
+// {y, mi, dia} -> "2026-08-03"
+function toISO(y, mi, dia) {
+  return `${y}-${String(mi + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+// Monta o texto do período a partir de duas datas (ISO). Ordena início/fim.
+//   Mesmo mês/ano:  "13 a 31 de Maio de 2026"
+//   Meses no mesmo ano: "27 de Julho a 3 de Agosto de 2026"
+//   Anos diferentes:    "28 de Dezembro de 2025 a 3 de Janeiro de 2026"
+function periodoFromDatas(startISO, endISO) {
+  let a = parseISO(startISO), b = parseISO(endISO);
+  if (!a || !b) return '';
+  if (a.y * 10000 + a.m * 100 + a.d > b.y * 10000 + b.m * 100 + b.d) { const t = a; a = b; b = t; }
+  if (a.m === b.m && a.y === b.y) return `${a.d} a ${b.d} de ${MESES[a.m]} de ${a.y}`;
+  if (a.y === b.y) return `${a.d} de ${MESES[a.m]} a ${b.d} de ${MESES[b.m]} de ${a.y}`;
+  return `${a.d} de ${MESES[a.m]} de ${a.y} a ${b.d} de ${MESES[b.m]} de ${b.y}`;
+}
+
+// ---------- Date picker custom (tema verde) ----------
+const DP_WEEK = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+const cmpDate = (a, b) => (a.y * 10000 + a.m * 100 + a.d) - (b.y * 10000 + b.m * 100 + b.d);
+
+// "2026-08-03" -> "03/08/2026"
+function fmtBR(iso) {
+  const p = parseISO(iso);
+  return p ? `${String(p.d).padStart(2, '0')}/${String(p.m + 1).padStart(2, '0')}/${p.y}` : '';
+}
+// Lê/grava a data do campo. A fonte de verdade é dataset.iso; o value mostra dd/mm/aaaa.
+function dpIso(input) { return input.dataset.iso || ''; }
+function dpSet(input, iso, silent) {
+  input.dataset.iso = iso || '';
+  input.value = fmtBR(iso);
+  if (!silent) input.dispatchEvent(new Event('change'));
+}
+
+// Anexa um calendário custom a um <input> readonly. opts.partner = campo par (realce de intervalo).
+function attachDatePicker(input, opts = {}) {
+  input.readOnly = true;
+  const wrap = input.closest('.field') || input.parentElement;
+  wrap.classList.add('dp-field');
+  const pop = el('div', { class: 'dp-pop hidden' });
+  wrap.appendChild(pop);
+  let view = null; // {y, m} do mês exibido
+
+  const render = () => {
+    const sel = parseISO(input.dataset.iso);
+    if (!view) {
+      const base = sel || (() => { const t = new Date(); return { y: t.getFullYear(), m: t.getMonth() }; })();
+      view = { y: base.y, m: base.m };
+    }
+    const { y, m } = view;
+    const startDow = new Date(y, m, 1).getDay();
+    const days = diasNoMes(m, y);
+    const partner = opts.partner ? parseISO(opts.partner.dataset.iso) : null;
+    const lo = sel && partner ? (cmpDate(sel, partner) <= 0 ? sel : partner) : null;
+    const hi = sel && partner ? (cmpDate(sel, partner) <= 0 ? partner : sel) : null;
+    const today = new Date();
+
+    pop.innerHTML = '';
+    const prev = el('button', { class: 'dp-nav', type: 'button', 'aria-label': 'Mês anterior' }, '‹');
+    const next = el('button', { class: 'dp-nav', type: 'button', 'aria-label': 'Próximo mês' }, '›');
+    prev.onclick = (e) => { e.stopPropagation(); view = m === 0 ? { y: y - 1, m: 11 } : { y, m: m - 1 }; render(); };
+    next.onclick = (e) => { e.stopPropagation(); view = m === 11 ? { y: y + 1, m: 0 } : { y, m: m + 1 }; render(); };
+    pop.append(el('div', { class: 'dp-head' }, [prev, el('div', { class: 'dp-title' }, `${MESES[m]} de ${y}`), next]));
+
+    const grid = el('div', { class: 'dp-grid' });
+    DP_WEEK.forEach((d) => grid.append(el('div', { class: 'dp-dow' }, d)));
+    for (let i = 0; i < startDow; i++) grid.append(el('div', { class: 'dp-cell' }));
+    for (let d = 1; d <= days; d++) {
+      const cur = { y, m, d };
+      const cls = ['dp-cell', 'dp-day'];
+      if (sel && sel.y === y && sel.m === m && sel.d === d) cls.push('dp-sel');
+      else if (lo && hi && cmpDate(cur, lo) >= 0 && cmpDate(cur, hi) <= 0) cls.push('dp-inrange');
+      if (today.getFullYear() === y && today.getMonth() === m && today.getDate() === d) cls.push('dp-today');
+      const cell = el('div', { class: cls.join(' ') }, String(d));
+      cell.onclick = (e) => { e.stopPropagation(); dpSet(input, toISO(y, m, d)); close(); };
+      grid.append(cell);
+    }
+    pop.append(grid);
+
+    const hoje = el('button', { class: 'dp-link', type: 'button' }, 'Hoje');
+    hoje.onclick = (e) => { e.stopPropagation(); const t = new Date(); dpSet(input, toISO(t.getFullYear(), t.getMonth(), t.getDate())); close(); };
+    const goto = el('button', { class: 'dp-link', type: 'button' }, 'Ir para hoje');
+    goto.onclick = (e) => { e.stopPropagation(); const t = new Date(); view = { y: t.getFullYear(), m: t.getMonth() }; render(); };
+    pop.append(el('div', { class: 'dp-foot' }, [goto, hoje]));
+  };
+
+  const open = () => {
+    document.querySelectorAll('.dp-pop').forEach((p) => p.classList.add('hidden')); // fecha os outros
+    view = null; render(); pop.classList.remove('hidden');
+  };
+  const close = () => pop.classList.add('hidden');
+
+  input.addEventListener('click', (e) => { e.stopPropagation(); pop.classList.contains('hidden') ? open() : close(); });
+  input.addEventListener('focus', open);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Escape' || e.key === 'Tab') close(); });
+  pop.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', close);
+}
+
+// Liga um controle de período (mês inteiro OU intervalo por calendário) e mantém o preview.
+// Retorna um getter que devolve a string atual do período.
+function setupPeriodo({ modeId, startWrapId, endWrapId, startId, endId, viewId, mesId, anoId, onChange }) {
+  const refMes = () => {
+    const mi = MESES.indexOf($(mesId).value);
+    const y = parseInt($(anoId).value, 10) || new Date().getFullYear();
+    return { mi, y, last: diasNoMes(mi, y) };
+  };
+  const textoMesInteiro = () => {
+    const { mi, y, last } = refMes();
+    return `1 a ${last} de ${MESES[mi]} de ${y}`;
+  };
+  // Preenche o calendário com o mês de referência inteiro.
+  const prefillMes = () => {
+    const { mi, y, last } = refMes();
+    dpSet($(startId), toISO(y, mi, 1), true);
+    dpSet($(endId), toISO(y, mi, last), true);
+  };
+  const get = () => {
+    if ($(modeId).value !== 'custom') return textoMesInteiro();
+    return periodoFromDatas(dpIso($(startId)), dpIso($(endId))) || textoMesInteiro();
+  };
   const upd = () => {
     const custom = $(modeId).value === 'custom';
-    $(deWrapId).classList.toggle('hidden', !custom);
-    $(ateWrapId).classList.toggle('hidden', !custom);
+    $(startWrapId).classList.toggle('hidden', !custom);
+    $(endWrapId).classList.toggle('hidden', !custom);
     const txt = get();
     $(viewId).textContent = '→ ' + txt;
     if (onChange) onChange(txt);
   };
-  [modeId, deId, ateId, mesId, anoId].forEach((id) => $(id).addEventListener('change', upd));
-  [deId, ateId].forEach((id) => $(id).addEventListener('input', upd));
+  // Date pickers custom (tema verde) com realce de intervalo entre os dois campos.
+  attachDatePicker($(startId), { partner: $(endId) });
+  attachDatePicker($(endId), { partner: $(startId) });
+  // Ao entrar no modo personalizado sem datas, prefill com o mês de referência.
+  $(modeId).addEventListener('change', () => {
+    if ($(modeId).value === 'custom' && !dpIso($(startId))) prefillMes();
+    upd();
+  });
+  // Trocar mês/ano reajusta o intervalo para o novo mês (referência é o guia).
+  [mesId, anoId].forEach((id) => $(id).addEventListener('change', () => {
+    if ($(modeId).value === 'custom') prefillMes();
+    upd();
+  }));
+  [startId, endId].forEach((id) => $(id).addEventListener('change', upd));
   upd();
+  // Datas resolvidas do período (para rotular o gráfico por faixas de data).
+  get.dates = () => {
+    if ($(modeId).value === 'custom') return { startISO: dpIso($(startId)), endISO: dpIso($(endId)) };
+    const { mi, y, last } = refMes();
+    return { startISO: toISO(y, mi, 1), endISO: toISO(y, mi, last) };
+  };
   return get;
 }
 
 let getIndividualPeriodo = () => '';
 let getBulkPeriodo = () => '';
+
+// Meses abreviados (rótulos do gráfico).
+const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+// Troca os labels do gráfico por faixas de data (mantém o resto). Fallback: labels da IA.
+function relabelGrafico(g, dates = {}) {
+  const base = g || { subtitulo: '', labels: [], valores: [] };
+  const valores = base.valores || [];
+  const datas = weekLabels(dates.startISO, dates.endISO, valores.length);
+  return { ...base, labels: datas.length === valores.length ? datas : (base.labels || []) };
+}
+
+// Divide [start,end] em n blocos contíguos e rotula cada um pela faixa de datas.
+//   Mesmo mês: "1–7 ago" · Meses diferentes: "27 jul–2 ago"
+function weekLabels(startISO, endISO, n) {
+  const a = parseISO(startISO), b = parseISO(endISO);
+  if (!a || !b || !n) return [];
+  let s = new Date(a.y, a.m, a.d), e = new Date(b.y, b.m, b.d);
+  if (e < s) { const t = s; s = e; e = t; }
+  const totalDays = Math.round((e - s) / 86400000) + 1;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const from = new Date(s); from.setDate(s.getDate() + Math.floor((i * totalDays) / n));
+    const to = new Date(s); to.setDate(s.getDate() + Math.floor(((i + 1) * totalDays) / n) - 1);
+    out.push(
+      from.getTime() === to.getTime()
+        ? `${from.getDate()} ${MES_ABBR[from.getMonth()]}`
+        : from.getMonth() === to.getMonth()
+          ? `${from.getDate()}–${to.getDate()} ${MES_ABBR[from.getMonth()]}`
+          : `${from.getDate()} ${MES_ABBR[from.getMonth()]}–${to.getDate()} ${MES_ABBR[to.getMonth()]}`
+    );
+  }
+  return out;
+}
 
 let toastTimer;
 function toast(msg, isErr = false) {
@@ -107,8 +274,8 @@ async function init() {
   mesSel.selectedIndex = new Date().getMonth();
 
   getIndividualPeriodo = setupPeriodo({
-    modeId: '#iPerMode', deWrapId: '#iPerDeWrap', ateWrapId: '#iPerAteWrap',
-    deId: '#iPerDe', ateId: '#iPerAte', viewId: '#iPerView',
+    modeId: '#iPerMode', startWrapId: '#iPerStartWrap', endWrapId: '#iPerEndWrap',
+    startId: '#iPerStart', endId: '#iPerEnd', viewId: '#iPerView',
     mesId: '#mes', anoId: '#ano',
     onChange: (txt) => { const p = $('#periodo'); if (p) p.value = txt; },
   });
@@ -118,6 +285,10 @@ async function init() {
   $('#geradoEm').value = '';
   $('#geradoEmDefault') && ($('#geradoEmDefault').value = '');
 
+  // perfil (mostra/esconde as configurações da IA)
+  $('#profileBtn').addEventListener('click', () => toggleProfile(true));
+  $('#profileBackBtn').addEventListener('click', () => toggleProfile(false));
+
   // configurações (chave + modelo)
   $('#saveKeyBtn').addEventListener('click', saveKey);
   $('#removeKeyBtn').addEventListener('click', removeKey);
@@ -126,13 +297,10 @@ async function init() {
   await loadSettings();
   await loadModels(false);
 
-  await loadClients();
   setupDropzone($('#dz1'), 0);
   setupDropzone($('#dz2'), 1);
   document.addEventListener('paste', handleGlobalPaste);
 
-  $('#clienteSelect').addEventListener('change', onClientChange);
-  $('#saveClientBtn').addEventListener('click', saveClient);
   $('#extractBtn').addEventListener('click', doExtract);
   $('#generateBtn').addEventListener('click', doGenerate);
   $('#previewBtn').addEventListener('click', doPreview);
@@ -141,6 +309,13 @@ async function init() {
   $('#addPasso').addEventListener('click', () => addPassoCard({}));
 
   setupBulk();
+}
+
+// ----- Perfil -----
+function toggleProfile(show) {
+  $('#settingsCard').classList.toggle('hidden', !show);
+  $('#mainView').classList.toggle('hidden', show);
+  if (show) window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ----- Configurações (chave + modelo) -----
@@ -269,56 +444,9 @@ async function saveModel() {
   toast('Modelo: ' + model);
 }
 
-// ----- Clientes (guardados no navegador — funciona local e no Vercel) -----
-const CLIENTS_KEY = 'lastone_clients';
+// Sistema não guarda clientes: é só preencher e gerar. `clients` fica vazio
+// (mantido só para o agrupamento do modo em massa, que lida com lista vazia).
 let clients = [];
-function readClientsLS() {
-  try { return JSON.parse(localStorage.getItem(CLIENTS_KEY)) || []; } catch { return []; }
-}
-function writeClientsLS(list) { localStorage.setItem(CLIENTS_KEY, JSON.stringify(list)); }
-
-async function loadClients() {
-  clients = readClientsLS();
-  const sel = $('#clienteSelect');
-  sel.innerHTML = '';
-  sel.appendChild(el('option', { value: '__new' }, '➕ Novo cliente…'));
-  clients.forEach((c) => sel.appendChild(el('option', { value: c.nome }, c.nome)));
-}
-
-function onClientChange() {
-  const v = $('#clienteSelect').value;
-  if (v === '__new') {
-    $('#novoClienteWrap').classList.remove('hidden');
-    $('#clienteNome').value = '';
-    return;
-  }
-  $('#novoClienteWrap').classList.remove('hidden');
-  const c = clients.find((x) => x.nome === v);
-  if (c) {
-    $('#clienteNome').value = c.nome;
-    if (c.gestor) $('#gestor').value = c.gestor;
-    $('#semCpc').checked = !!c.semCustoPorConversao;
-  }
-}
-
-async function saveClient() {
-  const nome = $('#clienteNome').value.trim();
-  if (!nome) return toast('Informe o nome da farmácia.', true);
-  const entry = {
-    nome,
-    gestor: $('#gestor').value.trim(),
-    semCustoPorConversao: $('#semCpc').checked,
-  };
-  const list = readClientsLS();
-  const i = list.findIndex((c) => c.nome.toLowerCase() === nome.toLowerCase());
-  if (i >= 0) list[i] = { ...list[i], ...entry };
-  else list.push(entry);
-  list.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  writeClientsLS(list);
-  await loadClients();
-  $('#clienteSelect').value = nome;
-  toast('Cliente salvo.');
-}
 
 // ----- Dropzones -----
 function setupDropzone(dz, idx) {
@@ -404,8 +532,11 @@ function renderReview(d) {
   // gráfico
   $('#graficoSub').value = d.grafico?.subtitulo || '';
   $('#graficoRows').innerHTML = '';
-  const labels = d.grafico?.labels || [];
   const valores = d.grafico?.valores || [];
+  // Rótulos por faixa de datas (determinístico), com fallback nos rótulos da IA.
+  const { startISO, endISO } = getIndividualPeriodo.dates ? getIndividualPeriodo.dates() : {};
+  const datas = weekLabels(startISO, endISO, valores.length);
+  const labels = datas.length === valores.length ? datas : (d.grafico?.labels || []);
   labels.forEach((l, i) => addSemanaRow(l, valores[i] ?? ''));
   updateSoma();
 
@@ -623,8 +754,8 @@ function setupBulk() {
   mesSel.selectedIndex = new Date().getMonth();
 
   getBulkPeriodo = setupPeriodo({
-    modeId: '#bPerMode', deWrapId: '#bPerDeWrap', ateWrapId: '#bPerAteWrap',
-    deId: '#bPerDe', ateId: '#bPerAte', viewId: '#bPerView',
+    modeId: '#bPerMode', startWrapId: '#bPerStartWrap', endWrapId: '#bPerEndWrap',
+    startId: '#bPerStart', endId: '#bPerEnd', viewId: '#bPerView',
     mesId: '#bMes', anoId: '#bAno',
   });
 
@@ -985,7 +1116,7 @@ async function processGroup(g) {
       gerado_em: geradoEm,
       gestor: g.gestor || $('#bGestor').value.trim(),
       metricas: data.metricas || [],
-      grafico: data.grafico || { subtitulo: '', labels: [], valores: [] },
+      grafico: relabelGrafico(data.grafico, getBulkPeriodo.dates ? getBulkPeriodo.dates() : {}),
       leilao: data.leilao || [],
       passos: data.passos || [],
     };
