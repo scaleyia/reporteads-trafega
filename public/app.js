@@ -664,7 +664,7 @@ function collectCfg() {
 }
 
 function validateCfg(cfg) {
-  if (!cfg.cliente) return 'Informe o nome da farmácia.';
+  if (!cfg.cliente) return 'Informe o nome do cliente.';
   if (!cfg.metricas.length) return 'Adicione pelo menos uma métrica.';
   if (!cfg.leilao.length) return 'Adicione pelo menos um concorrente na tabela de leilão.';
   return null;

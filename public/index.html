@@ -3,308 +3,87 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gerador de Relatórios LastOne</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <title>Tráfega Mídia · Painel de Relatórios</title>
+  <link rel="icon" href="/assets/logo.png" />
+  <link rel="stylesheet" href="/dashboard.css" />
 </head>
 <body>
-  <header class="topbar">
-    <img src="/assets/logo.png" alt="LastOne" />
-    <div class="topbar-right">
-      <span class="sub">Gerador de Relatórios · Google Ads</span>
-      <button class="btn btn-ghost btn-sm" id="profileBtn" title="Perfil e configurações">👤 Perfil</button>
-      <button class="btn btn-ghost btn-sm" id="logoutBtn" title="Encerrar sessão">Sair</button>
-    </div>
-  </header>
-
-  <div class="wrap">
-
-    <!-- PERFIL / CONFIGURAÇÕES (chave + modelo) -->
-    <section class="card hidden" id="settingsCard">
-      <div class="step-head">
-        <div class="num">⚙</div>
-        <h2>Configurações da IA</h2>
-        <span class="hint" id="settingsStatus"></span>
-        <button class="btn btn-ghost btn-sm" id="profileBackBtn" style="margin-left:auto;white-space:nowrap;">← Voltar</button>
+  <div class="app">
+    <!-- ============================ SIDEBAR ============================ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <img src="/assets/logo_white.png" alt="Tráfega Mídia" />
       </div>
 
-      <div class="grid cols-2">
-        <label class="field">
-          <span>API Key da OpenAI</span>
-          <div class="chip-row" style="flex-wrap:nowrap;">
-            <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" style="flex:1;" />
-            <button class="btn btn-primary btn-sm" id="saveKeyBtn" style="white-space:nowrap;">Salvar chave</button>
-            <button class="btn btn-link hidden" id="removeKeyBtn" style="white-space:nowrap;">🗑 Remover</button>
-          </div>
-          <div class="muted" id="keyStatus" style="margin-top:6px;"></div>
-        </label>
-
-        <label class="field">
-          <span>Modelo de IA</span>
-          <div class="chip-row" style="flex-wrap:nowrap;">
-            <select id="modelSelect" style="flex:1;"></select>
-            <button class="btn btn-ghost btn-sm" id="reloadModelsBtn" title="Buscar modelos da sua conta" style="white-space:nowrap;">↻</button>
-          </div>
-          <div class="muted" id="modelStatus" style="margin-top:6px;"></div>
-        </label>
-      </div>
-    </section>
-
-    <!-- VISÃO PRINCIPAL -->
-    <div id="mainView">
-
-    <!-- ABAS -->
-    <div class="tabs">
-      <button class="tab active" data-mode="bulk">⚡ Geração em massa</button>
-      <button class="tab" data-mode="individual">👤 Um cliente</button>
-    </div>
-
-    <!-- ===================== MODO INDIVIDUAL ===================== -->
-    <div id="modeIndividual" class="hidden">
-
-    <!-- ETAPA 1 — CLIENTE -->
-    <section class="card">
-      <div class="step-head">
-        <div class="num">1</div>
-        <h2>Cliente &amp; período</h2>
-        <span class="hint" id="modelHint"></span>
-      </div>
-
-      <div class="grid cols-2">
-        <label class="field">
-          <span>Nome da farmácia</span>
-          <input type="text" id="clienteNome" placeholder="Ex.: Biothera" />
-        </label>
-        <label class="field">
-          <span>Gestor responsável</span>
-          <input type="text" id="gestor" placeholder="Ex.: Gabriel Freire" />
-        </label>
-      </div>
-
-      <div class="grid cols-2" style="margin-top:14px;">
-        <label class="field">
-          <span>Mês de referência</span>
-          <select id="mes"></select>
-        </label>
-        <label class="field">
-          <span>Ano</span>
-          <input type="number" id="ano" value="2026" />
-        </label>
-      </div>
-
-      <div class="grid cols-3" style="margin-top:14px; align-items:end;">
-        <label class="field">
-          <span>Período do relatório</span>
-          <select id="iPerMode">
-            <option value="mes">Mês inteiro</option>
-            <option value="custom">Período personalizado</option>
-          </select>
-        </label>
-        <label class="field hidden" id="iPerStartWrap"><span>Data inicial</span><input type="text" id="iPerStart" placeholder="dd/mm/aaaa" readonly /></label>
-        <label class="field hidden" id="iPerEndWrap"><span>Data final</span><input type="text" id="iPerEnd" placeholder="dd/mm/aaaa" readonly /></label>
-      </div>
-      <div class="muted" id="iPerView" style="margin-top:6px;"></div>
-
-      <div class="actions" style="margin-top:16px;">
-        <label class="checkrow">
-          <input type="checkbox" id="semCpc" />
-          Cliente sem “custo por conversão” (usar card de Cliques)
-        </label>
-      </div>
-    </section>
-
-    <!-- ETAPA 2 — UPLOAD -->
-    <section class="card">
-      <div class="step-head">
-        <div class="num">2</div>
-        <h2>Prints do Google Ads</h2>
-        <span class="hint">A ordem não importa</span>
-      </div>
-
-      <div class="notice">
-        ⚠️ <b>Importante:</b> os prints precisam mostrar o <b>nome da conta de anúncios</b>
-        (aquele que aparece lá em cima, no topo da tela do Google Ads), para a IA ler os dados corretamente.
-      </div>
-
-      <div class="grid cols-2">
-        <div class="dropzone" id="dz1" tabindex="0">
-          <div class="dz-label">Print 1 — Visão geral / Resumo</div>
-          <div class="dz-hint">Cards de conversões, custo, CPC + período · clique, arraste ou cole (Ctrl+V)</div>
-          <input type="file" accept="image/*" class="hidden" />
-        </div>
-        <div class="dropzone" id="dz2" tabindex="0">
-          <div class="dz-label">Print 2 — Informações de leilão</div>
-          <div class="dz-hint">Tabela de concorrentes / parcela de impressões · clique, arraste ou cole (Ctrl+V)</div>
-          <input type="file" accept="image/*" class="hidden" />
-        </div>
-      </div>
-
-      <div class="actions" style="margin-top:18px;">
-        <button class="btn btn-primary" id="extractBtn" disabled>
-          <span id="extractLabel">🔍 Ler prints com a IA</span>
+      <nav class="nav" id="nav">
+        <div class="nav-group-label">Geral</div>
+        <button class="nav-item" data-route="painel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+          <span>Painel</span>
         </button>
-        <span class="muted" id="extractStatus"></span>
-      </div>
-    </section>
-
-    <!-- ETAPA 3 — CONFERÊNCIA -->
-    <section class="card hidden" id="reviewCard">
-      <div class="step-head">
-        <div class="num">3</div>
-        <h2>Confira os dados extraídos</h2>
-        <span class="hint">Edite qualquer campo antes de gerar</span>
-      </div>
-
-      <div class="avisos hidden" id="avisosBox"></div>
-
-      <div class="grid cols-2">
-        <label class="field"><span>Período (como no print)</span><input type="text" id="periodo" /></label>
-        <label class="field"><span>Gerado em</span><input type="text" id="geradoEm" /></label>
-      </div>
-
-      <div class="subtitle">Métricas (4 cards)</div>
-      <div class="grid cols-4" id="metricasGrid"></div>
-
-      <div class="subtitle">Gráfico — conversões por semana</div>
-      <label class="field"><span>Subtítulo</span><input type="text" id="graficoSub" /></label>
-      <div id="graficoRows" style="margin-top:10px;"></div>
-      <button class="btn btn-ghost btn-sm" id="addSemana" style="margin-top:8px;">+ semana</button>
-      <div class="muted" id="somaSemanas" style="margin-top:6px;"></div>
-
-      <div class="subtitle">Informações de leilão</div>
-      <div style="overflow-x:auto;">
-        <table class="editor" id="leilaoTable">
-          <thead><tr>
-            <th style="width:30%">Concorrente</th><th>Parcela</th><th>Sobrep.</th>
-            <th>Pos. acima</th><th>Topo</th><th class="center">Você</th><th></th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <button class="btn btn-ghost btn-sm" id="addLeilao" style="margin-top:8px;">+ concorrente</button>
-
-      <div class="subtitle">Próximos passos &amp; otimizações (4)</div>
-      <div class="grid cols-2" id="passosGrid"></div>
-      <button class="btn btn-ghost btn-sm" id="addPasso" style="margin-top:8px;">+ passo</button>
-
-      <div class="actions" style="margin-top:24px;">
-        <button class="btn btn-forest" id="generateBtn">
-          <span id="genLabel">📄 Gerar Relatório (PDF)</span>
+        <button class="nav-item" data-route="relatorios">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
+          <span>Relatórios</span>
         </button>
-        <button class="btn btn-ghost" id="previewBtn">👁 Pré-visualizar</button>
-        <span class="muted" id="genStatus"></span>
-      </div>
-    </section>
+        <button class="nav-item" data-route="agendamentos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 15h.01M12 15h.01M16 15h.01"/></svg>
+          <span>Agendamentos</span>
+        </button>
 
-    </div><!-- /modeIndividual -->
+        <div class="nav-group-label">Integrações</div>
+        <button class="nav-item" data-route="contas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
+          <span>Contas de anúncio</span>
+        </button>
+        <button class="nav-item" data-route="clientes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Clientes</span>
+        </button>
 
-    <!-- ===================== MODO EM MASSA ===================== -->
-    <div id="modeBulk">
+        <div class="nav-group-label">Sistema</div>
+        <button class="nav-item" data-route="config">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Configurações</span>
+        </button>
+      </nav>
 
-      <section class="card">
-        <div class="step-head">
-          <div class="num">1</div>
-          <h2>Período &amp; gestor (vale para todos)</h2>
-        </div>
-        <div class="grid cols-3">
-          <label class="field"><span>Mês de referência</span><select id="bMes"></select></label>
-          <label class="field"><span>Ano</span><input type="number" id="bAno" value="2026" /></label>
-          <label class="field"><span>Gestor responsável</span><input type="text" id="bGestor" placeholder="Ex.: Gabriel Freire" /></label>
-        </div>
-        <div class="grid cols-3" style="margin-top:14px; align-items:end;">
-          <label class="field">
-            <span>Período do relatório</span>
-            <select id="bPerMode">
-              <option value="mes">Mês inteiro</option>
-              <option value="custom">Período personalizado</option>
-            </select>
-          </label>
-          <label class="field hidden" id="bPerStartWrap"><span>Data inicial</span><input type="text" id="bPerStart" placeholder="dd/mm/aaaa" readonly /></label>
-          <label class="field hidden" id="bPerEndWrap"><span>Data final</span><input type="text" id="bPerEnd" placeholder="dd/mm/aaaa" readonly /></label>
-        </div>
-        <div class="muted" id="bPerView" style="margin-top:6px;"></div>
-      </section>
-
-      <section class="card">
-        <div class="step-head">
-          <div class="num">2</div>
-          <h2>Solte todos os prints</h2>
-          <span class="hint">2 prints por cliente</span>
-        </div>
-
-        <div class="notice">
-          ⚠️ <b>Importante:</b> todos os prints precisam mostrar o <b>nome da conta de anúncios</b>
-          (aquele que aparece lá em cima, no topo da tela do Google Ads). É por ele que a IA
-          identifica e agrupa cada cliente — prints sem o nome da conta visível não serão agrupados corretamente.
-        </div>
-
-        <div class="dropzone" id="bulkDz" tabindex="0">
-          <div class="dz-label">Arraste todos os prints aqui (clique para escolher ou cole com Ctrl+V)</div>
-          <div class="dz-hint">
-            A IA lê o nome do cliente <b>dentro de cada print</b> — não precisa renomear os arquivos.
-            Solte todos de uma vez (2 prints por cliente: visão geral + leilão).
+      <div class="sidebar-foot">
+        <div class="side-user">
+          <div class="avatar">TM</div>
+          <div class="meta">
+            <b>Tráfega Mídia</b>
+            <span>Administrador</span>
           </div>
-          <input type="file" accept="image/*" multiple class="hidden" id="bulkInput" />
         </div>
-        <div class="actions" style="margin-top:12px;">
-          <button class="btn btn-primary btn-sm" id="bulkIdentifyBtn" disabled>
-            <span id="bulkIdLabel">🔎 Identificar clientes</span>
-          </button>
-          <span class="muted" id="bulkCount"></span>
-          <button class="btn btn-link" id="bulkClear" style="margin-left:auto;">limpar</button>
+      </div>
+    </aside>
+    <div class="scrim-mobile" id="scrimMobile"></div>
+
+    <!-- ============================= MAIN ============================= -->
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Abrir menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+        </button>
+        <div class="spacer"></div>
+        <div class="searchbox">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="search" placeholder="Buscar cliente, conta…" />
         </div>
-        <div class="bulk-bar hidden" id="bulkIdBarWrap"><div class="bulk-bar-fill" id="bulkIdBarFill"></div></div>
-        <div class="thumbs" id="bulkThumbs"></div>
-      </section>
+      </header>
 
-      <section class="card hidden" id="bulkGroupsCard">
-        <div class="step-head">
-          <div class="num">3</div>
-          <h2>Clientes detectados</h2>
-          <span class="hint">Confira os nomes e quantidade de prints</span>
-        </div>
-        <div style="overflow-x:auto;">
-          <table class="editor" id="bulkTable">
-            <thead><tr>
-              <th style="width:42%">Cliente</th><th class="center">Prints</th>
-              <th class="center">Sem CPC</th><th>Status</th><th></th>
-            </tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-
-        <div class="actions" style="margin-top:20px;">
-          <button class="btn btn-forest" id="bulkRunBtn">
-            <span id="bulkRunLabel">⚡ Gerar todos os relatórios</span>
-          </button>
-          <span class="muted" id="bulkProgress"></span>
-        </div>
-        <div class="bulk-bar hidden" id="bulkBarWrap"><div class="bulk-bar-fill" id="bulkBarFill"></div></div>
-      </section>
-
-      <!-- ETAPA 4 — RESULTADOS (PDFs separados, cada um com seu botão) -->
-      <section class="card hidden" id="bulkResultsCard">
-        <div class="step-head">
-          <div class="num">4</div>
-          <h2>Relatórios gerados</h2>
-          <button class="btn btn-primary btn-sm" id="bulkZipBtn" style="margin-left:auto;">⬇️ Baixar todos (ZIP)</button>
-        </div>
-        <div id="bulkResults"></div>
-      </section>
-
-    </div><!-- /modeBulk -->
-
-    </div><!-- /mainView -->
-
+      <main class="content" id="view"><!-- render dinâmico --></main>
+    </div>
   </div>
 
+  <!-- Modal genérico -->
+  <div class="modal-scrim" id="modalScrim">
+    <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+  </div>
+
+  <!-- Toast -->
   <div class="toast" id="toast"></div>
-  <script src="/vendor/jszip.min.js"></script>
-  <script src="/app.js"></script>
-  <script>
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      try { await fetch('/api/logout', { method: 'POST' }); } catch {}
-      window.location.href = '/login.html';
-    });
-  </script>
+
+  <script src="/dashboard.js"></script>
 </body>
 </html>
