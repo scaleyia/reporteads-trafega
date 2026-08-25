@@ -7,3 +7,5 @@ _tmp/
 .DS_Store
 graphify-out/
 .graphifyignore
+data/trafega_*.json
+GUIA-INTEGRACAO.pdf

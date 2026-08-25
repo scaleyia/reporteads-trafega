@@ -1,5 +1,5 @@
 /* =========================================================================
-   Tráfega Mídia — Painel de Relatórios
+   Tráfega — Painel de Relatórios
    Estilo: Data-Dense Dashboard · identidade preto + verde (#12CC1C)
    ========================================================================= */
 
@@ -305,6 +305,7 @@ table.data .muted { color: var(--muted); }
   background: #eef1ee; color: #3d4a42; font-weight: 700; font-size: 12px;
   display: inline-flex; align-items: center; justify-content: center;
 }
+.avatar-sm svg { width: 15px; height: 15px; stroke-width: 1.8; }
 .cell-lead { display: flex; align-items: center; gap: 10px; }
 
 /* Integration status card */
@@ -615,3 +616,132 @@ table.data .muted { color: var(--muted); }
 .integration .logo.google svg, .integration .logo.meta svg { width: 62%; height: 62%; }
 .tag-plat .glyph.google, .tag-plat .glyph.meta { background: #fff; border: 1px solid var(--line); }
 .tag-plat .glyph.google svg, .tag-plat .glyph.meta svg { width: 15px; height: 15px; }
+
+/* =========================================================================
+   Conexão do WhatsApp (Evolution)
+   ========================================================================= */
+.btn-danger { background: var(--danger); color: #fff; border-color: transparent; }
+.btn-danger:hover { background: #a5311f; }
+
+@keyframes wa-spin { to { transform: rotate(360deg); } }
+
+.wa-card .card-head { gap: 12px; }
+.wa-badge {
+  width: 38px; height: 38px; border-radius: 10px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: #25d366; box-shadow: 0 1px 2px rgba(37,211,102,.4);
+}
+.wa-badge svg { width: 20px; height: 20px; }
+
+.wa-body { padding: 26px 22px; }
+
+.wa-loading {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 180px; color: var(--muted); font-size: 13px; font-weight: 500;
+}
+.wa-loading svg { width: 18px; height: 18px; animation: wa-spin 1s linear infinite; }
+
+/* --- CTA (desconectado) --- */
+.wa-cta { text-align: center; max-width: 420px; margin: 0 auto; padding: 12px 0; }
+.wa-illus {
+  width: 76px; height: 76px; margin: 0 auto 16px; border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #25d366, #0fa958); color: #fff;
+  box-shadow: 0 10px 26px rgba(37,211,102,.32);
+}
+.wa-illus svg { width: 36px; height: 36px; stroke-width: 2; }
+.wa-cta h4 { font-size: 16px; color: var(--ink); margin-bottom: 6px; }
+.wa-cta p { font-size: 13px; color: var(--ink-2); margin-bottom: 20px; }
+
+/* --- Conectando (QR + passos) --- */
+.wa-connect {
+  display: grid; grid-template-columns: 260px 1fr; gap: 28px; align-items: center;
+}
+.wa-qr { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.wa-qr-frame {
+  position: relative; width: 232px; height: 232px; padding: 14px; border-radius: 18px;
+  background: #fff; border: 1px solid var(--line);
+  box-shadow: var(--shadow); display: flex; align-items: center; justify-content: center;
+}
+.wa-qr-frame::before, .wa-qr-frame::after {
+  content: ""; position: absolute; width: 26px; height: 26px; pointer-events: none;
+  border: 3px solid #25d366; border-radius: 4px;
+}
+.wa-qr-frame::before { top: 8px; left: 8px; border-right: 0; border-bottom: 0; }
+.wa-qr-frame::after  { bottom: 8px; right: 8px; border-left: 0; border-top: 0; }
+.wa-qr-frame img { width: 100%; height: 100%; border-radius: 8px; image-rendering: pixelated; }
+.wa-waiting {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 600; color: var(--info);
+}
+.wa-spinner {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid var(--info-bg); border-top-color: var(--info);
+  animation: wa-spin .8s linear infinite;
+}
+
+.wa-steps h4 { font-size: 14px; color: var(--ink); margin-bottom: 12px; }
+.wa-steps ol { list-style: none; counter-reset: step; display: grid; gap: 12px; }
+.wa-steps li {
+  counter-increment: step; position: relative; padding-left: 38px;
+  font-size: 13.5px; color: var(--ink-2); line-height: 1.45;
+}
+.wa-steps li::before {
+  content: counter(step); position: absolute; left: 0; top: -1px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--green-tint); color: var(--green-700);
+  font-weight: 800; font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.wa-steps li b { color: var(--ink); }
+.wa-hint {
+  display: flex; align-items: flex-start; gap: 8px; margin-top: 16px;
+  padding: 10px 12px; border-radius: 10px; background: var(--info-bg);
+  color: #1e40af; font-size: 12.5px;
+}
+.wa-hint svg { width: 15px; height: 15px; flex: none; margin-top: 1px; }
+
+/* --- Conectado --- */
+.wa-connected { text-align: center; max-width: 380px; margin: 0 auto; padding: 8px 0; }
+.wa-avatar {
+  position: relative; width: 84px; height: 84px; margin: 0 auto 14px;
+  border-radius: 50%; overflow: hidden; background: var(--green-tint);
+  display: flex; align-items: center; justify-content: center;
+  border: 3px solid #fff; box-shadow: 0 4px 16px rgba(16,32,24,.14);
+}
+.wa-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.wa-avatar span svg { width: 34px; height: 34px; stroke: var(--green-700); }
+.wa-online {
+  position: absolute; right: 6px; bottom: 6px; width: 16px; height: 16px;
+  border-radius: 50%; background: #25d366; border: 3px solid #fff;
+}
+.wa-who b { display: block; font-size: 16px; color: var(--ink); }
+.wa-who span { font-size: 13.5px; color: var(--muted); }
+.wa-ok-badge {
+  display: inline-flex; align-items: center; gap: 6px; margin: 16px 0 20px;
+  padding: 7px 14px; border-radius: 999px;
+  background: var(--ok-bg); color: var(--ok); font-size: 12.5px; font-weight: 700;
+}
+.wa-ok-badge svg { width: 15px; height: 15px; stroke-width: 2.4; }
+
+@media (max-width: 720px) {
+  .wa-connect { grid-template-columns: 1fr; gap: 22px; justify-items: center; }
+  .wa-steps { width: 100%; }
+}
+
+/* =========================================================================
+   Agendamentos · configuração do horário do disparo
+   ========================================================================= */
+.ag-cfg .card-head { gap: 12px; flex-wrap: wrap; }
+.ag-cfg-ico {
+  width: 38px; height: 38px; border-radius: 10px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--green-tint); color: var(--green-700);
+}
+.ag-cfg-ico svg { width: 19px; height: 19px; }
+.ag-cfg .actions { display: flex; align-items: center; gap: 8px; }
+.ag-cfg-time { width: 120px; }
+.ag-cfg-body { padding-top: 0; }
+.ag-cfg-note { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+.ag-cfg-note svg { width: 15px; height: 15px; flex: none; }
+.ag-cfg-note b { color: var(--ink-2); }

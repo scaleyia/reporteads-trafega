@@ -1,5 +1,5 @@
 /* =========================================================================
-   Tráfega Mídia — Painel de Relatórios (front-end)
+   Tráfega — Painel de Relatórios (front-end)
    SPA vanilla com roteamento por hash. Dados mock nas áreas ainda sem back-end;
    a seção OpenAI (Configurações) já conversa com a API real (/api/settings).
    ========================================================================= */
@@ -31,6 +31,7 @@ const I = {
   adown:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>',
   back:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
   download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>',
+  play:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>',
 };
 
 /* delta pill: {v:'+8,9%', up:true} */
@@ -110,6 +111,7 @@ const ROUTES = {
   painel:       { title: 'Painel',            crumb: 'Visão geral',                       render: renderPainel },
   relatorios:   { title: 'Relatórios',        crumb: 'Histórico e geração',               render: renderRelatorios },
   agendamentos: { title: 'Agendamentos',      crumb: 'Disparos automáticos',              render: renderAgendamentos },
+  conexao:      { title: 'Conexão',           crumb: 'WhatsApp via Evolution',            render: renderConexao },
   contas:       { title: 'Contas de anúncio', crumb: 'Google Ads e Meta',                 render: renderContas },
   clientes:     { title: 'Clientes',          crumb: 'Destinatários e vínculos',          render: renderClientes },
   config:       { title: 'Configurações',     crumb: 'Credenciais e integrações',         render: renderConfig },
@@ -121,9 +123,10 @@ let selectedReport = SAMPLE_REPORT;
 function navigate() {
   const route = (location.hash.replace('#/', '') || 'painel');
   const def = ROUTES[route] || ROUTES.painel;
-  document.title = 'Tráfega Mídia · ' + def.title;
+  document.title = 'Tráfega · ' + def.title;
   const activeRoute = def.parent || (ROUTES[route] ? route : 'painel');
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.route === activeRoute));
+  stopWaPoll();
   const view = $('#view');
   view.innerHTML = '';
   def.render(view);
@@ -255,68 +258,445 @@ function openGerarModal() {
 }
 
 /* ---- Agendamentos ---- */
+const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+function freqResumo(s) {
+  if (s.frequencia === 'diaria') return 'Todo dia';
+  if (s.frequencia === 'semanal') return 'Toda ' + DIAS_SEMANA[Number(s.diaSemana) || 0].toLowerCase();
+  return 'Todo dia ' + (Number(s.diaMes) || 1) + ' do mês';
+}
+function proximaExecucao(s, hora) {
+  const now = new Date();
+  const [h, m] = (hora || '08:00').split(':').map(Number);
+  const d = new Date(now); d.setHours(h, m, 0, 0);
+  if (s.frequencia === 'diaria') { if (d <= now) d.setDate(d.getDate() + 1); }
+  else if (s.frequencia === 'semanal') {
+    let add = ((Number(s.diaSemana) - d.getDay()) + 7) % 7;
+    if (add === 0 && d <= now) add = 7;
+    d.setDate(d.getDate() + add);
+  } else {
+    d.setDate(Number(s.diaMes) || 1);
+    if (d <= now) d.setMonth(d.getMonth() + 1);
+  }
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) + ' · ' + (hora || '08:00');
+}
+
 function renderAgendamentos(v) {
   v.appendChild(el(
     '<div class="page-head"><div class="titles"><h2>Agendamentos</h2><p>Defina quando os relatórios são gerados e disparados automaticamente.</p></div>' +
-    '<div class="actions"><button class="btn btn-primary" id="agNew">' + I.plus + 'Novo agendamento</button></div></div>'
+    '<div class="actions"><button class="btn btn-ghost btn-sm" id="agRefresh">' + I.refresh + 'Atualizar</button>' +
+    '<button class="btn btn-primary" id="agNew">' + I.plus + 'Novo agendamento</button></div></div>'
   ));
 
-  v.appendChild(el('<div class="banner">' + I.info +
-    '<div>O disparo automático precisa de um <b>servidor sempre ligado</b>. Assim que o sistema estiver hospedado, estes agendamentos passam a rodar sozinhos.</div></div>'));
+  v.appendChild(el('<div class="banner">' + I.check +
+    '<div><b>Hospedado na Vercel.</b> Os disparos rodam sozinhos via <b>Vercel Cron</b> — não precisa de servidor sempre ligado. ' +
+    'No plano grátis (Hobby) roda <b>1× por dia</b> no horário abaixo (com ~1h de imprecisão).</div></div>'));
 
-  const card = el('<div class="card"></div>');
-  card.appendChild(el(emptyState(I.clock, 'Nenhum agendamento criado',
-    'Crie um agendamento para o sistema gerar e disparar os relatórios sozinho (ex.: todo dia 1º às 08:00).',
-    '<button class="btn btn-primary btn-sm" id="agEmptyNew">' + I.plus + 'Novo agendamento</button>')));
-  v.appendChild(card);
-  $('#agEmptyNew').onclick = () => $('#agNew').click();
-  $('#agNew').onclick = () => openModal('Novo agendamento',
-    '<div class="form-grid"><div class="field full"><label>Nome</label><input class="input" placeholder="Ex.: Fechamento mensal"></div>' +
-    '<div class="field"><label>Frequência</label><select class="select"><option>Mensal</option><option>Semanal</option><option>Diária</option></select></div>' +
-    '<div class="field"><label>Horário</label><input class="input" type="time" value="08:00"></div>' +
-    '<div class="field full"><label>Clientes</label><select class="select"><option>Todos os ativos</option><option>Selecionar manualmente</option></select></div></div>',
-    '<button class="btn btn-ghost" onclick="document.getElementById(\'modalScrim\').classList.remove(\'open\')">Cancelar</button><button class="btn btn-primary" onclick="document.getElementById(\'modalScrim\').classList.remove(\'open\')">Salvar</button>'
+  // Card de configuração do horário do disparo diário
+  const cfgCard = el('<div class="card ag-cfg"></div>');
+  v.appendChild(cfgCard);
+
+  const listCard = el('<div class="card" id="agList" style="margin-top:16px"></div>');
+  v.appendChild(listCard);
+
+  const runsCard = el('<div class="card" id="agRuns" style="margin-top:16px"><div class="card-head"><h3>Últimas execuções</h3><span class="sub">registro dos disparos</span></div></div>');
+  v.appendChild(runsCard);
+
+  const openNew = () => openAgendamentoModal(load);
+  $('#agNew').onclick = openNew;
+  $('#agRefresh').onclick = () => { toast('Atualizando…'); load(); };
+
+  let globalHora = '08:00';
+
+  function load() {
+    Promise.all([
+      fetch('/api/schedules/config').then((r) => r.json()),
+      fetch('/api/schedules').then((r) => r.json()),
+      fetch('/api/schedules/runs').then((r) => r.json()),
+    ]).then(([cfg, list, runs]) => {
+      globalHora = (cfg && cfg.hora) || '08:00';
+      renderCfg(globalHora);
+      renderList(Array.isArray(list) ? list : []);
+      renderRuns(Array.isArray(runs) ? runs : []);
+    }).catch(() => { listCard.innerHTML = ''; listCard.appendChild(el(emptyState(I.alert, 'Falha ao carregar', 'Não deu para consultar os agendamentos.'))); });
+  }
+
+  function renderCfg(hora) {
+    cfgCard.innerHTML = '';
+    cfgCard.appendChild(el(
+      '<div class="card-head"><div class="ag-cfg-ico">' + I.clock + '</div>' +
+      '<div><h3>Horário do disparo diário</h3><span class="sub">quando os relatórios saem, todo dia</span></div>' +
+      '<div class="actions"><input class="input ag-cfg-time" id="agHoraGlobal" type="time" value="' + hora + '">' +
+      '<button class="btn btn-primary btn-sm" id="agHoraSalvar">' + I.check + 'Salvar</button></div></div>'
+    ));
+    cfgCard.appendChild(el(
+      '<div class="card-pad ag-cfg-body"><p class="ag-cfg-note">' + I.info +
+      '<span>É possível escolher <b>apenas um horário por dia</b>, válido para todos os agendamentos.</span>' +
+      '</p></div>'
+    ));
+    $('#agHoraSalvar').onclick = () => {
+      const nova = $('#agHoraGlobal').value || '08:00';
+      fetch('/api/schedules/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hora: nova }) })
+        .then((r) => r.json()).then(() => { toast('Horário salvo.'); load(); })
+        .catch(() => toast('Falha ao salvar o horário.'));
+    };
+  }
+
+  function renderList(list) {
+    listCard.innerHTML = '';
+    if (!list.length) {
+      listCard.appendChild(el(emptyState(I.clock, 'Nenhum agendamento criado',
+        'Crie um agendamento para o sistema gerar e disparar os relatórios sozinho (ex.: todo dia 1º às 08:00).',
+        '<button class="btn btn-primary btn-sm" id="agEmptyNew">' + I.plus + 'Novo agendamento</button>')));
+      $('#agEmptyNew').onclick = openNew;
+      return;
+    }
+    const wrap = el('<div class="table-wrap"><table class="data"><thead><tr>' +
+      '<th>Nome</th><th>Quando</th><th>Clientes</th><th>Próxima</th><th>Ativo</th><th></th></tr></thead><tbody></tbody></table></div>');
+    const tb = $('tbody', wrap);
+    list.forEach((s) => {
+      const clientes = s.clientes === 'todos'
+        ? '<span class="pill mute">Todos os ativos</span>'
+        : '<span class="pill mute">' + (s.clientes.length) + ' selecionado' + (s.clientes.length === 1 ? '' : 's') + '</span>';
+      const tr = el(
+        '<tr><td><div class="cell-lead"><span class="avatar-sm">' + I.clock + '</span><span class="strong">' + s.nome + '</span></div></td>' +
+        '<td class="muted">' + freqResumo(s) + ' · ' + globalHora + '</td>' +
+        '<td>' + clientes + '</td>' +
+        '<td class="muted tnum">' + (s.ativo ? proximaExecucao(s, globalHora) : '—') + '</td>' +
+        '<td><label class="switch"><input type="checkbox" ' + (s.ativo ? 'checked' : '') + '><span class="track"></span></label></td>' +
+        '<td><div class="row-actions">' +
+        '<button class="icon-btn" data-run title="Executar agora">' + I.play + '</button>' +
+        '<button class="icon-btn" data-del title="Remover">' + I.trash + '</button></div></td></tr>'
+      );
+      $('.switch input', tr).onchange = (e) => {
+        const ativo = e.target.checked;
+        fetch('/api/schedules/' + s.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo }) })
+          .then((r) => r.json()).then(() => { toast(ativo ? 'Agendamento ativado.' : 'Agendamento pausado.'); load(); })
+          .catch(() => toast('Falha ao atualizar.'));
+      };
+      $('[data-run]', tr).onclick = () => {
+        toast('Executando agora…');
+        fetch('/api/schedules/' + s.id + '/run', { method: 'POST' })
+          .then((r) => r.json()).then((res) => { toast('Disparo processado (' + res.ran + ').'); load(); })
+          .catch(() => toast('Falha ao executar.'));
+      };
+      $('[data-del]', tr).onclick = () => {
+        openModal('Remover agendamento',
+          '<p style="font-size:14px;color:var(--ink-2)">Remover <b>' + s.nome + '</b>? Esta ação não pode ser desfeita.</p>',
+          '<button class="btn btn-ghost" onclick="document.getElementById(\'modalScrim\').classList.remove(\'open\')">Cancelar</button>' +
+          '<button class="btn btn-danger" id="agDelOk">' + I.trash + 'Remover</button>');
+        $('#agDelOk').onclick = () => {
+          closeModal();
+          fetch('/api/schedules/' + s.id, { method: 'DELETE' })
+            .then((r) => r.json()).then(() => { toast('Agendamento removido.'); load(); })
+            .catch(() => toast('Falha ao remover.'));
+        };
+      };
+      tb.appendChild(tr);
+    });
+    listCard.appendChild(wrap);
+  }
+
+  function renderRuns(runs) {
+    const head = runsCard.querySelector('.card-head');
+    runsCard.innerHTML = '';
+    runsCard.appendChild(head);
+    if (!runs.length) {
+      runsCard.appendChild(el('<div class="card-pad" style="padding-top:0"><p class="muted" style="font-size:13px">Nenhum disparo ainda. Use <b>Executar agora</b> para testar ou aguarde o horário agendado.</p></div>'));
+      return;
+    }
+    const wrap = el('<div class="table-wrap"><table class="data"><thead><tr><th>Quando</th><th>Agendamento</th><th>Clientes</th><th>Status</th></tr></thead><tbody></tbody></table></div>');
+    const tb = $('tbody', wrap);
+    runs.slice(0, 12).forEach((r) => {
+      const quando = new Date(r.data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const nc = Array.isArray(r.clientes) ? r.clientes.length : 0;
+      const status = r.status === 'pendente'
+        ? '<span class="pill warn" title="' + (r.motivo || '') + '"><span class="dot"></span>Pendente</span>'
+        : r.status === 'enviado' || r.status === 'ok'
+          ? '<span class="pill ok"><span class="dot"></span>Enviado</span>'
+          : '<span class="pill err"><span class="dot"></span>Falha</span>';
+      tb.appendChild(el('<tr><td class="muted tnum">' + quando + '</td><td class="strong">' + r.nome + '</td>' +
+        '<td class="muted tnum">' + nc + '</td><td>' + status + '</td></tr>'));
+    });
+    runsCard.appendChild(wrap);
+  }
+
+  load();
+}
+
+function openAgendamentoModal(onSaved) {
+  fetch('/api/clients').then((r) => r.json()).then((clientes) => {
+    const opts = (Array.isArray(clientes) ? clientes : []).map((c) => '<option value="' + c.nome + '">' + c.nome + '</option>').join('');
+    const semanaOpts = DIAS_SEMANA.map((d, i) => '<option value="' + i + '"' + (i === 1 ? ' selected' : '') + '>' + d + '</option>').join('');
+    const mesOpts = Array.from({ length: 28 }, (_, i) => '<option value="' + (i + 1) + '">Dia ' + (i + 1) + '</option>').join('');
+
+    openModal('Novo agendamento',
+      '<div class="form-grid">' +
+      '<div class="field full"><label>Nome <span class="req">*</span></label><input class="input" id="agNome" placeholder="Ex.: Fechamento mensal"></div>' +
+      '<div class="field"><label>Frequência</label><select class="select" id="agFreq"><option value="mensal">Mensal</option><option value="semanal">Semanal</option><option value="diaria">Diária</option></select></div>' +
+      '<div class="field" id="agDiaMesWrap"><label>Dia do mês</label><select class="select" id="agDiaMes">' + mesOpts + '</select></div>' +
+      '<div class="field" id="agDiaSemWrap" style="display:none"><label>Dia da semana</label><select class="select" id="agDiaSem">' + semanaOpts + '</select></div>' +
+      '<div class="field full"><label>Clientes</label><select class="select" id="agModo"><option value="todos">Todos os ativos</option><option value="manual">Selecionar manualmente</option></select></div>' +
+      '<div class="field full" id="agClientesWrap" style="display:none"><label>Selecione os clientes</label><select class="select" id="agClientes" multiple size="4">' + opts + '</select>' +
+      '<span class="hint">Segure Ctrl/Cmd para escolher vários.' + (opts ? '' : ' Nenhum cliente cadastrado ainda.') + '</span></div>' +
+      '<div class="field full"><span class="hint">⏰ O horário do disparo é definido uma vez para todos, na própria página de Agendamentos.</span></div>' +
+      '</div>',
+      '<button class="btn btn-ghost" onclick="document.getElementById(\'modalScrim\').classList.remove(\'open\')">Cancelar</button>' +
+      '<button class="btn btn-primary" id="agSalvar">' + I.check + 'Salvar agendamento</button>'
+    );
+
+    const freq = $('#agFreq');
+    const syncFreq = () => {
+      $('#agDiaMesWrap').style.display = freq.value === 'mensal' ? '' : 'none';
+      $('#agDiaSemWrap').style.display = freq.value === 'semanal' ? '' : 'none';
+    };
+    freq.onchange = syncFreq; syncFreq();
+    $('#agModo').onchange = (e) => { $('#agClientesWrap').style.display = e.target.value === 'manual' ? '' : 'none'; };
+
+    $('#agSalvar').onclick = () => {
+      const nome = $('#agNome').value.trim();
+      if (!nome) return toast('Dê um nome ao agendamento.');
+      const frequencia = freq.value;
+      const modo = $('#agModo').value;
+      const clientes = modo === 'manual'
+        ? [...$('#agClientes').selectedOptions].map((o) => o.value)
+        : 'todos';
+      if (modo === 'manual' && !clientes.length) return toast('Escolha ao menos um cliente.');
+      const body = {
+        nome, frequencia, clientes,
+        diaMes: Number($('#agDiaMes').value), diaSemana: Number($('#agDiaSem').value),
+      };
+      fetch('/api/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+        .then(({ ok, d }) => { if (!ok) throw new Error(d.error || 'Falha'); closeModal(); toast('Agendamento criado.'); onSaved && onSaved(); })
+        .catch((e) => toast(e.message || 'Falha ao salvar.'));
+    };
+  }).catch(() => toast('Falha ao carregar clientes.'));
+}
+
+/* ---- Conexão (WhatsApp · Evolution API) ---- */
+let waPollTimer = null;
+function stopWaPoll() { if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; } }
+
+function renderConexao(v) {
+  stopWaPoll();
+
+  v.appendChild(el(
+    '<div class="page-head"><div class="titles"><h2>Conexão do WhatsApp</h2>' +
+    '<p>Conecte um aparelho para o sistema enviar os relatórios pelo WhatsApp.</p></div>' +
+    '<div class="actions"><button class="btn btn-ghost btn-sm" id="waRefresh">' + I.refresh + 'Atualizar</button></div></div>'
+  ));
+
+  const card = el(
+    '<div class="card wa-card"><div class="card-head">' +
+    '<div class="wa-badge">' + waMini() + '</div>' +
+    '<div><h3>WhatsApp</h3><span class="sub">Aparelho que dispara os relatórios</span></div>' +
+    '<div class="actions"><span class="pill mute" id="waPill"><span class="dot"></span>Verificando…</span></div></div>' +
+    '<div class="wa-body" id="waBody"><div class="wa-loading">' + I.refresh + '<span>Verificando conexão…</span></div></div></div>'
   );
+  v.appendChild(card);
+
+  const body = $('#waBody', card);
+  const pill = $('#waPill', card);
+
+  const setPill = (cls, txt) => { pill.className = 'pill ' + cls; pill.innerHTML = '<span class="dot"></span>' + txt; };
+
+  /* ---- Estado: desconectado (oferece conectar) ---- */
+  function showDisconnected() {
+    setPill('warn', 'Desconectado');
+    body.innerHTML =
+      '<div class="wa-cta">' +
+      '<div class="wa-illus">' + I.wa + '</div>' +
+      '<h4>Nenhum aparelho conectado</h4>' +
+      '<p>Gere um QR Code e leia com o celular que vai enviar os relatórios. A leitura leva alguns segundos.</p>' +
+      '<button class="btn btn-primary" id="waConnect">' + I.link + 'Conectar aparelho</button>' +
+      '</div>';
+    $('#waConnect', body).onclick = startConnect;
+  }
+
+  /* ---- Estado: QR na tela, aguardando leitura ---- */
+  function showQr(qr) {
+    setPill('info', 'Aguardando leitura');
+    body.innerHTML =
+      '<div class="wa-connect">' +
+      '<div class="wa-qr"><div class="wa-qr-frame">' +
+      (qr ? '<img src="' + qr + '" alt="QR Code do WhatsApp" />'
+          : '<div class="wa-loading">' + I.refresh + '<span>Gerando QR…</span></div>') +
+      '</div><div class="wa-waiting"><span class="wa-spinner"></span>Aguardando leitura…</div>' +
+      '<button class="btn btn-ghost btn-sm" id="waNewQr">' + I.refresh + 'Gerar novo QR</button></div>' +
+      '<div class="wa-steps"><h4>Como conectar</h4><ol>' +
+      '<li>Abra o <b>WhatsApp</b> no celular.</li>' +
+      '<li>Toque em <b>⋮ / Ajustes</b> → <b>Aparelhos conectados</b>.</li>' +
+      '<li>Toque em <b>Conectar aparelho</b>.</li>' +
+      '<li>Aponte a câmera para o <b>QR Code</b> ao lado.</li></ol>' +
+      '<div class="wa-hint">' + I.info + '<span>O código expira em ~40s. Se sumir, é só gerar um novo.</span></div></div>' +
+      '</div>';
+    $('#waNewQr', body).onclick = startConnect;
+    startPoll();
+  }
+
+  /* ---- Estado: conectado (mostra o aparelho) ---- */
+  function showConnected(profile) {
+    stopWaPoll();
+    setPill('ok', 'Conectado');
+    const p = profile || {};
+    const foto = p.foto
+      ? '<img src="' + p.foto + '" alt="" />'
+      : '<span>' + waMini() + '</span>';
+    const numero = p.numero ? formatPhone(p.numero) : 'Número conectado';
+    body.innerHTML =
+      '<div class="wa-connected">' +
+      '<div class="wa-avatar">' + foto + '<span class="wa-online"></span></div>' +
+      '<div class="wa-who"><b>' + (p.nome || 'Aparelho conectado') + '</b><span>' + numero + '</span></div>' +
+      '<div class="wa-ok-badge">' + I.check + 'Pronto para enviar relatórios</div>' +
+      '<button class="btn btn-ghost" id="waDisc">' + I.power + 'Desconectar</button>' +
+      '</div>';
+    $('#waDisc', body).onclick = () => {
+      openModal('Desconectar WhatsApp',
+        '<p style="font-size:14px;color:var(--ink-2)">Tem certeza que deseja desconectar este aparelho? Os relatórios deixam de ser enviados até você conectar de novo.</p>',
+        '<button class="btn btn-ghost" onclick="document.getElementById(\'modalScrim\').classList.remove(\'open\')">Cancelar</button>' +
+        '<button class="btn btn-danger" id="waDiscOk">' + I.power + 'Desconectar</button>');
+      $('#waDiscOk').onclick = () => {
+        closeModal();
+        toast('Desconectando…');
+        fetch('/api/whatsapp/disconnect', { method: 'POST' })
+          .then((r) => r.json()).then(() => { toast('Aparelho desconectado.'); showDisconnected(); })
+          .catch(() => toast('Falha ao desconectar.'));
+      };
+    };
+  }
+
+  /* ---- Ações ---- */
+  function startConnect() {
+    setPill('info', 'Gerando QR…');
+    body.innerHTML = '<div class="wa-loading">' + I.refresh + '<span>Gerando QR Code…</span></div>';
+    fetch('/api/whatsapp/connect', { method: 'POST' })
+      .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (!ok) throw new Error(d.error || 'Falha');
+        if (d.state === 'open') return showConnected(d.profile);
+        showQr(d.qr);
+      })
+      .catch((e) => { toast(e.message || 'Falha ao gerar o QR.'); showDisconnected(); });
+  }
+
+  function startPoll() {
+    stopWaPoll();
+    waPollTimer = setInterval(() => {
+      fetch('/api/whatsapp/status').then((r) => r.json()).then((s) => {
+        if (s.state === 'open') { toast('WhatsApp conectado! 🎉'); showConnected(s.profile); }
+      }).catch(() => {});
+    }, 3000);
+  }
+
+  function refresh() {
+    fetch('/api/whatsapp/status').then((r) => r.json()).then((s) => {
+      if (s.state === 'open') showConnected(s.profile);
+      else showDisconnected();
+    }).catch(() => { setPill('err', 'Erro'); body.innerHTML = emptyState(I.alert, 'Não deu para consultar', 'Verifique o servidor da Evolution e tente novamente.'); });
+  }
+
+  $('#waRefresh').onclick = refresh;
+  refresh();
+}
+
+/* +5517981235049 -> +55 (17) 98123-5049 (melhor esforço; devolve cru se não casar) */
+function formatPhone(n) {
+  const d = String(n).replace(/\D/g, '');
+  const m = d.match(/^(\d{2})(\d{2})(\d{4,5})(\d{4})$/);
+  return m ? '+' + m[1] + ' (' + m[2] + ') ' + m[3] + '-' + m[4] : '+' + d;
 }
 
 /* ---- Contas de anúncio ---- */
+function fmtNum(n) { return (Number(n) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 }); }
+function fmtMoeda(n, m) { return (m || 'R$') + ' ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function moedaSigla(m) { return m === 'BRL' ? 'R$' : (m || 'R$'); }
+function tempoAtras(iso) {
+  if (!iso) return '—';
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'agora';
+  if (s < 3600) return Math.floor(s / 60) + ' min atrás';
+  if (s < 86400) return Math.floor(s / 3600) + ' h atrás';
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+
 function renderContas(v) {
   v.appendChild(el(
-    '<div class="page-head"><div class="titles"><h2>Contas de anúncio</h2><p>Contas do Google Ads (MCC) e do Meta que alimentam os relatórios.</p></div>' +
-    '<div class="actions"><button class="btn btn-ghost btn-sm" id="ctSync">' + I.refresh + 'Sincronizar contas</button></div></div>'
+    '<div class="page-head"><div class="titles"><h2>Contas de anúncio</h2><p>Dados do Google Ads (via Script no MCC) e da Meta (via token) que alimentam os relatórios.</p></div>' +
+    '<div class="actions"><button class="btn btn-ghost btn-sm" id="ctRefresh">' + I.refresh + 'Atualizar</button>' +
+    '<button class="btn btn-primary" id="ctMeta">' + I.refresh + 'Sincronizar Meta</button></div></div>'
   ));
 
-  // Cards de conexão (OAuth)
-  const conn = el('<div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:16px"></div>');
-  [
-    { cls: 'google', l: GADS, n: 'Google Ads (MCC)', s: 'Conecte para importar as contas do seu MCC automaticamente.', btn: '<button class="btn-oauth google">' + GOOGLE_G + 'Conectar com o Google</button>' },
-    { cls: 'meta', l: META, n: 'Meta Ads', s: 'Conecte para importar suas contas de anúncio automaticamente.', btn: '<button class="btn-oauth meta">' + FB_F + 'Conectar com o Facebook</button>' },
-  ].forEach((x) => {
-    const c = el('<div class="card integration"><div class="logo ' + x.cls + '">' + x.l + '</div>' +
-      '<div class="info"><b>' + x.n + '</b><p>' + x.s + '</p></div></div>');
-    const b = el(x.btn);
-    b.onclick = () => toast('Botão pronto! A conexão real liga quando o token/app estiver aprovado.');
-    c.appendChild(b);
-    conn.appendChild(c);
-  });
-  v.appendChild(conn);
+  const statusRow = el('<div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:16px"></div>');
+  v.appendChild(statusRow);
 
-  const card = el('<div class="card"><div class="card-head"><h3>Contas detectadas</h3><span class="sub">aparecem automaticamente após conectar</span></div></div>');
-  if (!DATA.contas.length) {
-    card.appendChild(el(emptyState(I.plug, 'Nenhuma conta conectada',
-      'Conecte o Google Ads ou o Meta acima e as contas serão importadas automaticamente para cá.')));
-  } else {
-    const wrap = el('<div class="table-wrap"><table class="data"><thead><tr><th>Conta</th><th>Plataforma</th><th>ID</th><th>Status</th><th>Último relatório</th></tr></thead><tbody></tbody></table></div>');
+  const card = el('<div class="card" id="ctList"></div>');
+  v.appendChild(card);
+
+  function statusCard(cls, glyph, nome, desc, ok, okTxt, pendTxt) {
+    return '<div class="card integration">' +
+      '<div class="logo ' + cls + '">' + glyph + '</div>' +
+      '<div class="info"><b>' + nome + '</b><p>' + desc + '</p></div>' +
+      '<span class="pill ' + (ok ? 'ok' : 'warn') + '"><span class="dot"></span>' + (ok ? okTxt : pendTxt) + '</span></div>';
+  }
+
+  function load() {
+    Promise.all([
+      fetch('/api/integrations').then((r) => r.json()).catch(() => ({})),
+      fetch('/api/accounts').then((r) => r.json()).catch(() => []),
+    ]).then(([integ, contas]) => {
+      contas = Array.isArray(contas) ? contas : [];
+      const temGoogle = contas.some((c) => c.plataforma === 'google');
+      statusRow.innerHTML = '';
+      statusRow.appendChild(el(statusCard('google', GADS, 'Google Ads (MCC)',
+        'Via Google Ads Script — sem API/aprovação.', temGoogle, 'Recebendo dados', 'Aguardando 1º envio')));
+      statusRow.appendChild(el(statusCard('meta', META, 'Meta Ads',
+        'Via System User token do seu Business Manager.', integ.metaConfigured, 'Token configurado', 'Sem token')));
+      renderList(contas);
+    });
+  }
+
+  function renderList(contas) {
+    card.innerHTML = '<div class="card-head"><h3>Contas detectadas</h3><span class="sub">' + contas.length + ' conta(s) · atualizam sozinhas</span></div>';
+    if (!contas.length) {
+      card.appendChild(el(emptyState(I.plug, 'Nenhuma conta ainda',
+        'Assim que o Google Ads Script rodar no MCC ou a Meta sincronizar, as contas aparecem aqui com os números reais.')));
+      return;
+    }
+    const wrap = el('<div class="table-wrap"><table class="data"><thead><tr>' +
+      '<th>Conta</th><th>Plataforma</th><th>Período</th><th>Conversões</th><th>Custo</th><th>Atualizado</th><th></th></tr></thead><tbody></tbody></table></div>');
     const tb = $('tbody', wrap);
-    DATA.contas.forEach((c) => tb.appendChild(el(
-      '<tr><td><div class="cell-lead"><span class="avatar-sm">' + initials(c.nome) + '</span><span class="strong">' + c.nome + '</span></div></td>' +
-      '<td>' + platTag(c.plat) + '</td><td class="muted tnum">' + c.id + '</td>' +
-      '<td><span class="pill warn"><span class="dot"></span>Pendente</span></td><td class="muted">' + c.ultimo + '</td></tr>'
-    )));
+    contas.forEach((c) => {
+      const sig = moedaSigla(c.moeda);
+      const tr = el(
+        '<tr><td><div class="cell-lead"><span class="avatar-sm">' + initials(c.nome) + '</span><span class="strong">' + c.nome + '</span></div></td>' +
+        '<td>' + platTag(c.plataforma) + '</td>' +
+        '<td class="muted">' + (c.periodo || '—') + '</td>' +
+        '<td class="tnum strong">' + fmtNum(c.metricas.conversoes) + '</td>' +
+        '<td class="muted tnum">' + fmtMoeda(c.metricas.custo, sig) + '</td>' +
+        '<td class="muted">' + tempoAtras(c.atualizadoEm) + '</td>' +
+        '<td><div class="row-actions"><button class="icon-btn" data-del title="Remover">' + I.trash + '</button></div></td></tr>'
+      );
+      $('[data-del]', tr).onclick = () => {
+        fetch('/api/accounts/' + encodeURIComponent(c.id), { method: 'DELETE' })
+          .then((r) => r.json()).then(() => { toast('Conta removida.'); load(); })
+          .catch(() => toast('Falha ao remover.'));
+      };
+      tb.appendChild(tr);
+    });
     card.appendChild(wrap);
   }
-  v.appendChild(card);
-  $('#ctSync').onclick = () => toast('Sincronização disponível após conectar Google/Meta.');
+
+  $('#ctRefresh').onclick = () => { toast('Atualizando…'); load(); };
+  $('#ctMeta').onclick = () => {
+    toast('Sincronizando a Meta…');
+    fetch('/api/meta/sync', { method: 'POST' })
+      .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => { if (!ok) throw new Error(d.error || 'Falha'); toast(d.contas + ' conta(s) sincronizada(s).'); load(); })
+      .catch((e) => toast(e.message || 'Falha ao sincronizar a Meta.'));
+  };
+
+  load();
 }
 
 /* ---- Clientes ---- */
