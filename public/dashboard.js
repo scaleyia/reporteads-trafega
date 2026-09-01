@@ -410,11 +410,14 @@ function renderAgendamentos(v) {
     runs.slice(0, 12).forEach((r) => {
       const quando = new Date(r.data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
       const nc = Array.isArray(r.clientes) ? r.clientes.length : 0;
-      const status = r.status === 'pendente'
-        ? '<span class="pill warn" title="' + (r.motivo || '') + '"><span class="dot"></span>Pendente</span>'
-        : r.status === 'enviado' || r.status === 'ok'
-          ? '<span class="pill ok"><span class="dot"></span>Enviado</span>'
-          : '<span class="pill err"><span class="dot"></span>Falha</span>';
+      const t = ' title="' + (r.motivo || '').replace(/"/g, '&quot;') + '"';
+      const status = (r.status === 'enviado' || r.status === 'ok')
+        ? '<span class="pill ok"' + t + '><span class="dot"></span>Enviado</span>'
+        : r.status === 'parcial'
+          ? '<span class="pill warn"' + t + '><span class="dot"></span>Parcial</span>'
+          : r.status === 'pendente'
+            ? '<span class="pill warn"' + t + '><span class="dot"></span>Pendente</span>'
+            : '<span class="pill err"' + t + '><span class="dot"></span>Falha</span>';
       tb.appendChild(el('<tr><td class="muted tnum">' + quando + '</td><td class="strong">' + r.nome + '</td>' +
         '<td class="muted tnum">' + nc + '</td><td>' + status + '</td></tr>'));
     });
@@ -731,7 +734,7 @@ function renderClientes(v) {
           : '<span class="muted">—</span>';
         const tr = el(
           '<tr><td><div class="cell-lead"><span class="avatar-sm">' + initials(c.nome) + '</span><span class="strong">' + c.nome + '</span></div></td>' +
-          '<td>' + chips + '</td><td class="tnum">' + (c.whatsapp || '—') + '</td><td class="muted">' + (c.gestor || '—') + '</td>' +
+          '<td>' + chips + '</td><td class="tnum">' + (c.whatsapp ? formatPhone(c.whatsapp) : '—') + '</td><td class="muted">' + (c.gestor || '—') + '</td>' +
           '<td><label class="switch"><input type="checkbox" ' + (c.ativo !== false ? 'checked' : '') + '><span class="track"></span></label></td>' +
           '<td><div class="row-actions"><button class="icon-btn" data-edit title="Editar">' + I.edit + '</button><button class="icon-btn" data-del title="Remover">' + I.trash + '</button></div></td></tr>'
         );
@@ -769,7 +772,7 @@ function openClienteModal(onSaved, cliente) {
     openModal(editando ? 'Editar cliente' : 'Novo cliente',
       '<div class="form-grid">' +
       '<div class="field full"><label>Nome do cliente <span class="req">*</span></label><input class="input" id="clNome" placeholder="Ex.: Nome do cliente" value="' + (editando ? cliente.nome.replace(/"/g, '&quot;') : '') + '"' + (editando ? ' readonly' : '') + '></div>' +
-      '<div class="field"><label>WhatsApp (destinatário) <span class="req">*</span></label><input class="input" id="clWhats" type="tel" placeholder="+55 47 99999-0000" value="' + (editando ? (cliente.whatsapp || '') : '') + '"></div>' +
+      '<div class="field"><label>WhatsApp (destinatário) <span class="req">*</span></label><input class="input" id="clWhats" type="tel" placeholder="47 99999-9999" value="' + (editando ? formatPhone(cliente.whatsapp || '') : '') + '"><span class="hint">Pode digitar só DDD + número — o +55 entra sozinho.</span></div>' +
       '<div class="field"><label>Gestor responsável</label><input class="input" id="clGestor" placeholder="Ex.: Gabriel" value="' + (editando ? (cliente.gestor || '') : '') + '"></div>' +
       '<div class="field full"><label>Contas vinculadas <span class="muted">(' + contas.length + ' disponíveis)</span></label>' +
       '<input class="input" id="clFiltro" placeholder="Filtrar por nome..." style="margin-bottom:6px">' +
