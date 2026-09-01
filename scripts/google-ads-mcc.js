@@ -1,13 +1,9 @@
-// Trafega - Google Ads Script (nivel MCC)
-// Roda dentro da conta gerenciadora (MCC). Nao precisa de developer token
-// nem de aprovacao de API. Varre as contas-filhas, coleta as metricas do mes
-// e envia para o sistema via webhook (/api/ingest).
-// Uso: cole no editor de Scripts (MCC), Autorize, Execute e agende como Diariamente.
+// Trafega - Google Ads Script (nivel MCC) - SEMANAL
+// Envia as metricas da SEMANA ANTERIOR de cada conta para /api/ingest.
+// Cole no editor de Scripts (conta MCC), Autorize, Execute e agende Diariamente.
 
 var ENDPOINT = 'https://reporteads-trafega.vercel.app/api/ingest';
 var TOKEN = 'COLE_AQUI_O_INGEST_TOKEN';
-
-var MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
 function main() {
   var it = AdsManagerApp.accounts().get();
@@ -26,9 +22,21 @@ function main() {
   Logger.log('Concluido. Enviadas: ' + enviadas + ' | Falhas: ' + falhas);
 }
 
+// Segunda e domingo da semana anterior.
+function janela() {
+  var hoje = new Date();
+  var dow = (hoje.getDay() + 6) % 7; // 0 = segunda
+  var thisMon = new Date(hoje); thisMon.setDate(hoje.getDate() - dow);
+  var prevMon = new Date(thisMon); prevMon.setDate(thisMon.getDate() - 7);
+  var prevSun = new Date(thisMon); prevSun.setDate(thisMon.getDate() - 1);
+  return { prevMon: prevMon, prevSun: prevSun };
+}
+
 function enviarConta(conta) {
   var acc = AdsApp.currentAccount();
-  var s = acc.getStatsFor('THIS_MONTH');
+  var j = janela();
+  var s = acc.getStatsFor(fmt(j.prevMon), fmt(j.prevSun));
+
   var conversoes = s.getConversions();
   var cliques = s.getClicks();
   var custo = s.getCost();
@@ -38,7 +46,7 @@ function enviarConta(conta) {
     contaId: conta.getCustomerId(),
     contaNome: conta.getName(),
     moeda: acc.getCurrencyCode(),
-    periodo: nomeDoMes(new Date()),
+    periodo: 'Semana passada',
     metricas: {
       conversoes: conversoes,
       cliques: cliques,
@@ -47,7 +55,7 @@ function enviarConta(conta) {
       custoPorConversao: conversoes ? custo / conversoes : 0,
       impressoes: s.getImpressions()
     },
-    serie: serieMensal(acc)
+    serie: serieSemanal(acc, j.prevMon)
   };
 
   var resp = UrlFetchApp.fetch(ENDPOINT, {
@@ -62,15 +70,14 @@ function enviarConta(conta) {
   }
 }
 
-// Serie de conversoes dos ultimos 5 meses (para o grafico).
-function serieMensal(acc) {
+// Conversoes das ultimas 6 semanas (a ultima e a semana anterior).
+function serieSemanal(acc, prevMon) {
   var labels = [], valores = [];
-  var hoje = new Date();
-  for (var i = 4; i >= 0; i--) {
-    var ini = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-    var fim = new Date(hoje.getFullYear(), hoje.getMonth() - i + 1, 0);
+  for (var i = 5; i >= 0; i--) {
+    var ini = new Date(prevMon); ini.setDate(prevMon.getDate() - i * 7);
+    var fim = new Date(ini); fim.setDate(ini.getDate() + 6);
     var st = acc.getStatsFor(fmt(ini), fmt(fim));
-    labels.push(MESES[ini.getMonth()]);
+    labels.push(ddmm(ini));
     valores.push(st.getConversions());
   }
   return { labels: labels, valores: valores };
@@ -82,6 +89,8 @@ function fmt(d) {
   return '' + d.getFullYear() + m + dd; // yyyymmdd
 }
 
-function nomeDoMes(d) {
-  return MESES[d.getMonth()] + '/' + d.getFullYear();
+function ddmm(d) {
+  var m = ('0' + (d.getMonth() + 1)).slice(-2);
+  var dd = ('0' + d.getDate()).slice(-2);
+  return dd + '/' + m;
 }
