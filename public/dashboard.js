@@ -138,64 +138,122 @@ function navigate() {
 /* ============================== PÁGINAS ================================= */
 
 /* ---- Painel ---- */
+function proximaDate(s, hora) {
+  const now = new Date();
+  const [h, m] = (hora || '08:00').split(':').map(Number);
+  const d = new Date(now); d.setHours(h, m, 0, 0);
+  if (s.frequencia === 'diaria') { if (d <= now) d.setDate(d.getDate() + 1); }
+  else if (s.frequencia === 'semanal') {
+    let add = ((Number(s.diaSemana) - d.getDay()) + 7) % 7;
+    if (add === 0 && d <= now) add = 7;
+    d.setDate(d.getDate() + add);
+  } else {
+    d.setDate(Number(s.diaMes) || 1);
+    if (d <= now) d.setMonth(d.getMonth() + 1);
+  }
+  return d;
+}
+
 function renderPainel(v) {
   v.appendChild(el(
     '<div class="hero"><span class="hero-glow a"></span><span class="hero-glow b"></span>' +
     '<div class="hero-txt"><h2>Bem-vindo de volta, Tráfega</h2>' +
-    '<p>Aqui está o resumo da sua operação de relatórios. Conecte suas contas e configure os clientes para começar a disparar no WhatsApp.</p></div></div>'
+    '<p>Aqui está o resumo da sua operação de relatórios automáticos no WhatsApp.</p></div></div>'
   ));
+  const bannerSlot = el('<div></div>'); v.appendChild(bannerSlot);
 
-  v.appendChild(el(
-    '<div class="banner">' + I.info +
-    '<div><b>Vamos começar.</b> Conecte suas contas do Google Ads e Meta e configure os clientes para gerar e disparar os relatórios. Comece em <a href="#/config" style="text-decoration:underline;font-weight:700">Configurações</a>.</div></div>'
-  ));
-
-  const kpis = [
-    { ico: I.plug,  cls: '',      label: 'Contas conectadas',         value: '0',  foot: 'Nenhuma conta conectada' },
-    { ico: I.send,  cls: 'blue',  label: 'Relatórios enviados (mês)',  value: '0',  foot: 'Nenhum envio ainda' },
-    { ico: I.clock, cls: 'amber', label: 'Próximo disparo',            value: '—',  foot: 'Nenhum agendamento ativo' },
-    { ico: I.wa,    cls: 'slate', label: 'Entrega no WhatsApp',        value: '—',  foot: 'Sem dados ainda' },
-  ];
-  const grid = el('<div class="grid kpi-grid"></div>');
-  kpis.forEach((k) => grid.appendChild(el(
-    '<div class="kpi"><div class="top"><div class="ico ' + k.cls + '">' + k.ico + '</div></div>' +
-    '<div class="label">' + k.label + '</div><div class="value tnum">' + k.value + '</div>' +
-    '<div class="delta flat">' + k.foot + '</div></div>'
-  )));
-  v.appendChild(grid);
-
+  const grid = el('<div class="grid kpi-grid"></div>'); v.appendChild(grid);
   const row = el('<div class="grid" style="margin-top:16px"></div>');
-  // Activity
-  const feed = el(
-    '<div class="card"><div class="card-head"><h3>Atividade recente</h3></div><div class="feed"></div></div>'
-  );
-  $('.feed', feed).appendChild(el(emptyState(I.clock, 'Nenhuma atividade ainda', 'Assim que os relatórios começarem a ser gerados e enviados, o histórico aparece aqui.')));
-  row.appendChild(feed);
-  v.appendChild(row);
-
-  // Integrações status
-  const integ = el('<div class="card" style="margin-top:16px"><div class="card-head"><h3>Integrações</h3><div class="actions"><a class="btn btn-ghost btn-sm" href="#/config">Gerenciar</a></div></div><div class="grid" style="grid-template-columns:repeat(4,1fr);gap:0"></div></div>');
-  const box = $('.grid', integ);
-  [
-    { cls: 'google', l: GADS, n: 'Google Ads', s: 'Aguardando token' },
-    { cls: 'meta', l: META, n: 'Meta Ads', s: 'Aguardando token' },
-    { cls: 'wa', l: '', n: 'WhatsApp', s: 'Aguardando instância' },
-    { cls: 'ai', l: '', n: 'OpenAI', s: 'Verificando…', id: 'integAi' },
-  ].forEach((x, i) => box.appendChild(el(
-    '<div class="integration"' + (i < 3 ? ' style="border-right:1px solid var(--line-2)"' : '') + '>' +
-    '<div class="logo ' + x.cls + '">' + (x.l || (x.cls === 'wa' ? waMini() : aiMini())) + '</div>' +
-    '<div class="info"><b>' + x.n + '</b><p ' + (x.id ? 'id="' + x.id + '"' : '') + '>' + x.s + '</p></div>' +
-    '<span class="pill ' + (x.cls === 'ai' ? 'mute' : 'warn') + '"><span class="dot"></span>' + (x.cls === 'ai' ? '...' : 'Pendente') + '</span></div>'
-  )));
+  const feed = el('<div class="card"><div class="card-head"><h3>Atividade recente</h3><div class="actions"><a class="btn btn-ghost btn-sm" href="#/agendamentos">Ver todos</a></div></div><div class="feed"></div></div>');
+  row.appendChild(feed); v.appendChild(row);
+  const integ = el('<div class="card" style="margin-top:16px"><div class="card-head"><h3>Integrações</h3></div><div class="grid" style="grid-template-columns:repeat(4,1fr);gap:0"></div></div>');
   v.appendChild(integ);
 
-  // Confere OpenAI de verdade
-  fetch('/api/settings').then((r) => r.json()).then((s) => {
-    const p = $('#integAi'); const pill = p?.parentElement?.parentElement?.querySelector('.pill');
-    if (!p) return;
-    if (s.hasKey) { p.textContent = 'Chave configurada · ' + (s.model || 'modelo padrão'); pill.className = 'pill ok'; pill.innerHTML = '<span class="dot"></span>Conectado'; }
-    else { p.textContent = 'Sem chave'; pill.className = 'pill warn'; pill.innerHTML = '<span class="dot"></span>Pendente'; }
-  }).catch(() => {});
+  function kpiCard(ico, cls, label, value, foot) {
+    return '<div class="kpi"><div class="top"><div class="ico ' + cls + '">' + ico + '</div></div>' +
+      '<div class="label">' + label + '</div><div class="value tnum">' + value + '</div>' +
+      '<div class="delta flat">' + foot + '</div></div>';
+  }
+  function runPill(st) {
+    if (st === 'enviado' || st === 'ok') return '<span class="pill ok"><span class="dot"></span>Enviado</span>';
+    if (st === 'parcial') return '<span class="pill warn"><span class="dot"></span>Parcial</span>';
+    if (st === 'pendente') return '<span class="pill warn"><span class="dot"></span>Pendente</span>';
+    return '<span class="pill err"><span class="dot"></span>Falha</span>';
+  }
+  function integCard(cls, glyph, nome, ok, txt, first) {
+    return '<div class="integration"' + (first ? ' style="border-right:1px solid var(--line-2)"' : '') + '>' +
+      '<div class="logo ' + cls + '">' + glyph + '</div>' +
+      '<div class="info"><b>' + nome + '</b><p>' + txt + '</p></div>' +
+      '<span class="pill ' + (ok ? 'ok' : 'warn') + '"><span class="dot"></span>' + (ok ? 'Conectado' : 'Pendente') + '</span></div>';
+  }
+
+  Promise.all([
+    fetch('/api/accounts').then((r) => r.json()).catch(() => []),
+    fetch('/api/clients').then((r) => r.json()).catch(() => []),
+    fetch('/api/schedules').then((r) => r.json()).catch(() => []),
+    fetch('/api/schedules/runs').then((r) => r.json()).catch(() => []),
+    fetch('/api/schedules/config').then((r) => r.json()).catch(() => ({ hora: '08:00' })),
+    fetch('/api/whatsapp/status').then((r) => r.json()).catch(() => ({ state: 'none' })),
+    fetch('/api/integrations').then((r) => r.json()).catch(() => ({})),
+    fetch('/api/settings').then((r) => r.json()).catch(() => ({})),
+  ]).then(([accounts, clients, schedules, runs, cfg, wa, integs, settings]) => {
+    accounts = Array.isArray(accounts) ? accounts : [];
+    clients = Array.isArray(clients) ? clients : [];
+    schedules = Array.isArray(schedules) ? schedules : [];
+    runs = Array.isArray(runs) ? runs : [];
+    const nG = accounts.filter((a) => a.plataforma === 'google').length;
+    const nM = accounts.filter((a) => a.plataforma === 'meta').length;
+    const ativos = schedules.filter((s) => s.ativo !== false);
+    const enviados = runs.filter((r) => r.status === 'enviado' || r.status === 'ok').length;
+    const waOk = wa.state === 'open';
+
+    // Banner: só aparece se ainda falta configurar algo essencial.
+    if (!accounts.length || !waOk) {
+      bannerSlot.appendChild(el('<div class="banner">' + I.info +
+        '<div><b>Falta pouco.</b> ' +
+        (!accounts.length ? 'Rode o script do Google / sincronize o Meta em <a href="#/contas" style="text-decoration:underline;font-weight:700">Contas de anúncio</a>. ' : '') +
+        (!waOk ? 'Conecte o WhatsApp em <a href="#/conexao" style="text-decoration:underline;font-weight:700">Conexão</a>.' : '') +
+        '</div></div>'));
+    } else {
+      bannerSlot.appendChild(el('<div class="banner" style="background:var(--ok-bg);border-color:#cfe9d2;color:var(--ok)">' + I.check +
+        '<div><b>Tudo pronto!</b> Contas conectadas, WhatsApp ativo. Crie agendamentos em <a href="#/agendamentos" style="text-decoration:underline;font-weight:700">Agendamentos</a>.</div></div>'));
+    }
+
+    // Próximo disparo
+    let proxTxt = '—', proxFoot = 'Nenhum agendamento ativo';
+    if (ativos.length) {
+      const next = ativos.map((s) => proximaDate(s, cfg.hora)).sort((a, b) => a - b)[0];
+      proxTxt = next.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+      proxFoot = (cfg.hora || '08:00') + ' · ' + ativos.length + ' agendamento(s)';
+    }
+
+    grid.innerHTML =
+      kpiCard(I.plug, '', 'Contas conectadas', String(accounts.length), accounts.length ? nG + ' Google · ' + nM + ' Meta' : 'Nenhuma conta ainda') +
+      kpiCard(I.users, 'blue', 'Clientes', String(clients.length), clients.length ? clients.filter((c) => c.ativo !== false).length + ' ativos' : 'Nenhum cadastrado') +
+      kpiCard(I.clock, 'amber', 'Próximo disparo', proxTxt, proxFoot) +
+      kpiCard(I.wa, 'slate', 'WhatsApp', waOk ? 'Ativo' : 'Off', waOk ? (wa.profile?.nome || 'Conectado') : 'Desconectado');
+
+    // Atividade recente
+    const feedEl = $('.feed', feed);
+    if (!runs.length) {
+      feedEl.appendChild(el(emptyState(I.clock, 'Nenhuma atividade ainda', 'Os disparos aparecem aqui assim que os relatórios começarem a ser enviados.')));
+    } else {
+      runs.slice(0, 6).forEach((r) => {
+        const quando = new Date(r.data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const nc = Array.isArray(r.clientes) ? r.clientes.length : 0;
+        feedEl.appendChild(el('<div class="integration" style="border-bottom:1px solid var(--line-2)"><div class="logo wa">' + waMini() + '</div>' +
+          '<div class="info"><b>' + r.nome + '</b><p>' + quando + ' · ' + nc + ' cliente(s)</p></div>' + runPill(r.status) + '</div>'));
+      });
+    }
+
+    // Integrações reais
+    const gGlyph = GADS, mGlyph = META;
+    $('.grid', integ).innerHTML =
+      integCard('google', gGlyph, 'Google Ads', nG > 0, nG > 0 ? nG + ' contas' : 'Rode o script', true) +
+      integCard('meta', mGlyph, 'Meta Ads', integs.metaConfigured, integs.metaConfigured ? nM + ' contas' : 'Sem token', true) +
+      integCard('wa', waMini(), 'WhatsApp', waOk, waOk ? (wa.profile?.numero ? '+' + wa.profile.numero : 'Conectado') : 'Desconectado', true) +
+      integCard('ai', aiMini(), 'OpenAI', !!settings.hasKey, settings.hasKey ? (settings.model || 'configurada') : 'Sem chave', false);
+  });
 }
 
 /* ---- Relatórios ---- */
@@ -808,17 +866,11 @@ function renderConfig(v) {
     '<div class="page-head"><div class="titles"><h2>Configurações</h2><p>Credenciais das integrações. Ficam salvas no servidor e não são versionadas.</p></div></div>'
   ));
 
-  // Google — OAuth
-  v.appendChild(oauthCard('google', 'Google Ads (MCC)',
-    'Importa as métricas de todas as contas do seu MCC.',
-    'Autorize <b>uma vez</b> com a conta que gerencia o MCC — todas as contas-filhas entram automaticamente. Sem tokens na mão, sem adicionar ninguém como administrador.',
-    '<button class="btn-oauth google">' + GOOGLE_G + 'Conectar com o Google</button>'));
-
-  // Meta — OAuth
-  v.appendChild(oauthCard('meta', 'Meta Ads',
-    'Acessa as contas de anúncio do Gerenciador de Negócios.',
-    'Faça login <b>uma vez</b> como admin do Gerenciador de Negócios e todas as contas de anúncio ficam disponíveis. Sem copiar tokens.',
-    '<button class="btn-oauth meta">' + FB_F + 'Conectar com o Facebook</button>'));
+  // Onde ficam as integrações reais (Google via Script, Meta via token)
+  v.appendChild(el('<div class="banner">' + I.info +
+    '<div>As contas do <b>Google Ads</b> (via Script no MCC) e do <b>Meta</b> (via token) são gerenciadas em ' +
+    '<a href="#/contas" style="text-decoration:underline;font-weight:700">Contas de anúncio</a>, e o <b>WhatsApp</b> em ' +
+    '<a href="#/conexao" style="text-decoration:underline;font-weight:700">Conexão</a>. Aqui fica só a chave da OpenAI.</div></div>'));
 
   // OpenAI — real
   const ai = credCard('ai', '', 'OpenAI',
