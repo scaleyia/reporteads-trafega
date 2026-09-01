@@ -13,7 +13,6 @@ import { getStatus as waStatus, connect as waConnect, disconnect as waDisconnect
 import { listSchedules, createSchedule, updateSchedule, removeSchedule, listRuns, runDue, getConfig, setConfig } from './lib/schedules.js';
 import { listAccounts, ingestAccount, removeAccount } from './lib/accounts.js';
 import { listClients, upsertClient, removeClient } from './lib/clients.js';
-import { getBranding, setBranding, clearBranding } from './lib/branding.js';
 import { syncMeta, META_ENABLED } from './lib/meta.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -75,26 +74,6 @@ app.delete('/api/settings/key', (_req, res) => {
 app.get('/api/models', async (_req, res) => {
   const result = await listModels();
   res.json({ ...result, current: getModel() });
-});
-
-// ---------- Marca (logo white-label) ----------
-app.get('/api/branding', async (_req, res) => {
-  try { res.json(await getBranding()); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/branding', async (req, res) => {
-  try {
-    const { logo } = req.body || {};
-    if (logo && !/^data:image\//.test(logo)) return res.status(400).json({ error: 'Envie um arquivo de imagem.' });
-    if (logo && logo.length > 700000) return res.status(400).json({ error: 'Imagem muito grande (máx. ~500KB). Use um PNG/SVG menor.' });
-    res.json(await setBranding(logo));
-  } catch (err) { res.status(400).json({ error: err.message }); }
-});
-
-app.delete('/api/branding', async (_req, res) => {
-  try { res.json(await clearBranding()); }
-  catch (err) { res.status(400).json({ error: err.message }); }
 });
 
 // ---------- Clientes ----------
