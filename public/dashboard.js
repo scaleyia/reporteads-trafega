@@ -706,47 +706,97 @@ function renderClientes(v) {
     '<div class="actions"><button class="btn btn-primary" id="clNew">' + I.plus + 'Novo cliente</button></div></div>'
   ));
 
-  const card = el('<div class="card"></div>');
-  if (!DATA.clientes.length) {
-    card.appendChild(el(emptyState(I.users, 'Nenhum cliente cadastrado',
-      'Cadastre seus clientes e vincule cada um a um número de WhatsApp e a um gestor para começar a enviar relatórios.',
-      '<button class="btn btn-primary btn-sm" id="clEmptyNew">' + I.plus + 'Cadastrar cliente</button>')));
-    v.appendChild(card);
-    $('#clNew').onclick = openClienteModal;
-    $('#clEmptyNew').onclick = openClienteModal;
-    return;
-  }
-  const wrap = el('<div class="table-wrap"><table class="data"><thead><tr>' +
-    '<th>Cliente</th><th>Contas vinculadas</th><th>WhatsApp</th><th>Gestor</th><th>Ativo</th><th></th></tr></thead><tbody></tbody></table></div>');
-  const tb = $('tbody', wrap);
-  DATA.clientes.forEach((c) => {
-    const contas = c.contas.map((n) => '<span class="pill mute" style="margin-right:4px">' + n + '</span>').join('');
-    tb.appendChild(el(
-      '<tr><td><div class="cell-lead"><span class="avatar-sm">' + initials(c.nome) + '</span><span class="strong">' + c.nome + '</span></div></td>' +
-      '<td>' + contas + '</td><td class="tnum">' + c.whats + '</td><td class="muted">' + c.gestor + '</td>' +
-      '<td><label class="switch"><input type="checkbox" ' + (c.ativo ? 'checked' : '') + '><span class="track"></span></label></td>' +
-      '<td><div class="row-actions"><button class="icon-btn" title="Editar">' + I.edit + '</button><button class="icon-btn" title="Remover">' + I.trash + '</button></div></td></tr>'
-    ));
-  });
-  card.appendChild(wrap);
+  const card = el('<div class="card" id="clList"></div>');
   v.appendChild(card);
-  $('#clNew').onclick = openClienteModal;
-  card.querySelectorAll('.switch input').forEach((s) => s.onchange = (e) => toast(e.target.checked ? 'Cliente ativado.' : 'Cliente pausado.'));
-  card.querySelectorAll('.icon-btn').forEach((b) => b.onclick = () => toast('Edição de clientes conecta ao back-end na próxima fase.'));
+
+  function load() {
+    fetch('/api/clients').then((r) => r.json()).then((list) => {
+      list = Array.isArray(list) ? list : [];
+      card.innerHTML = '';
+      if (!list.length) {
+        card.appendChild(el(emptyState(I.users, 'Nenhum cliente cadastrado',
+          'Cadastre seus clientes e vincule cada um a um número de WhatsApp e às contas de anúncio para começar a enviar relatórios.',
+          '<button class="btn btn-primary btn-sm" id="clEmptyNew">' + I.plus + 'Cadastrar cliente</button>')));
+        $('#clEmptyNew').onclick = () => openClienteModal(load);
+        return;
+      }
+      const wrap = el('<div class="table-wrap"><table class="data"><thead><tr>' +
+        '<th>Cliente</th><th>Contas vinculadas</th><th>WhatsApp</th><th>Gestor</th><th>Ativo</th><th></th></tr></thead><tbody></tbody></table></div>');
+      const tb = $('tbody', wrap);
+      list.forEach((c) => {
+        const arr = c.contas || [];
+        const chips = arr.length
+          ? arr.slice(0, 3).map((n) => '<span class="pill mute" style="margin-right:4px">' + (n.nome || n) + '</span>').join('') +
+            (arr.length > 3 ? '<span class="pill mute">+' + (arr.length - 3) + '</span>' : '')
+          : '<span class="muted">—</span>';
+        const tr = el(
+          '<tr><td><div class="cell-lead"><span class="avatar-sm">' + initials(c.nome) + '</span><span class="strong">' + c.nome + '</span></div></td>' +
+          '<td>' + chips + '</td><td class="tnum">' + (c.whatsapp || '—') + '</td><td class="muted">' + (c.gestor || '—') + '</td>' +
+          '<td><label class="switch"><input type="checkbox" ' + (c.ativo !== false ? 'checked' : '') + '><span class="track"></span></label></td>' +
+          '<td><div class="row-actions"><button class="icon-btn" data-edit title="Editar">' + I.edit + '</button><button class="icon-btn" data-del title="Remover">' + I.trash + '</button></div></td></tr>'
+        );
+        $('.switch input', tr).onchange = (e) => {
+          fetch('/api/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: c.nome, ativo: e.target.checked }) })
+            .then(() => toast(e.target.checked ? 'Cliente ativado.' : 'Cliente pausado.'));
+        };
+        $('[data-edit]', tr).onclick = () => openClienteModal(load, c);
+        $('[data-del]', tr).onclick = () => {
+          openModal('Remover cliente', '<p style="font-size:14px;color:var(--ink-2)">Remover <b>' + c.nome + '</b>?</p>',
+            '<button class="btn btn-ghost" onclick="document.getElementById(\'modalScrim\').classList.remove(\'open\')">Cancelar</button>' +
+            '<button class="btn btn-danger" id="clDelOk">' + I.trash + 'Remover</button>');
+          $('#clDelOk').onclick = () => { closeModal(); fetch('/api/clients/' + encodeURIComponent(c.nome), { method: 'DELETE' }).then(() => { toast('Cliente removido.'); load(); }); };
+        };
+        tb.appendChild(tr);
+      });
+      card.appendChild(wrap);
+    }).catch(() => { card.innerHTML = ''; card.appendChild(el(emptyState(I.alert, 'Falha ao carregar', 'Não deu para listar os clientes.'))); });
+  }
+
+  $('#clNew').onclick = () => openClienteModal(load);
+  load();
 }
 
-function openClienteModal() {
-  openModal('Novo cliente',
-    '<div class="form-grid">' +
-    '<div class="field full"><label>Nome do cliente <span class="req">*</span></label><input class="input" placeholder="Ex.: Nome do cliente"></div>' +
-    '<div class="field"><label>WhatsApp (destinatário) <span class="req">*</span></label><input class="input" type="tel" placeholder="+55 34 99999-0000"></div>' +
-    '<div class="field"><label>Gestor responsável</label><input class="input" placeholder="Ex.: Gabriel"></div>' +
-    '<div class="field full"><label>Contas vinculadas</label><select class="select"><option>Selecione após conectar Google/Meta…</option></select><span class="hint">Você poderá vincular uma ou mais contas de anúncio.</span></div>' +
-    '</div>',
-    '<button class="btn btn-ghost" onclick="document.getElementById(\'modalScrim\').classList.remove(\'open\')">Cancelar</button>' +
-    '<button class="btn btn-primary" id="doCliente">Salvar cliente</button>'
-  );
-  $('#doCliente').onclick = () => { closeModal(); toast('Cliente salvo (persistência entra na próxima fase).'); };
+function openClienteModal(onSaved, cliente) {
+  const editando = !!cliente;
+  fetch('/api/accounts').then((r) => r.json()).then((contas) => {
+    contas = Array.isArray(contas) ? contas : [];
+    const jaTem = new Set(((cliente && cliente.contas) || []).map((x) => x.id || x));
+    const opts = contas.map((a) =>
+      '<option value="' + a.id + '" data-nome="' + a.nome.replace(/"/g, '&quot;') + '" data-plat="' + a.plataforma + '"' +
+      (jaTem.has(a.id) ? ' selected' : '') + '>' + a.nome + '  ·  ' + (a.plataforma === 'google' ? 'Google' : 'Meta') + '</option>'
+    ).join('');
+
+    openModal(editando ? 'Editar cliente' : 'Novo cliente',
+      '<div class="form-grid">' +
+      '<div class="field full"><label>Nome do cliente <span class="req">*</span></label><input class="input" id="clNome" placeholder="Ex.: Nome do cliente" value="' + (editando ? cliente.nome.replace(/"/g, '&quot;') : '') + '"' + (editando ? ' readonly' : '') + '></div>' +
+      '<div class="field"><label>WhatsApp (destinatário) <span class="req">*</span></label><input class="input" id="clWhats" type="tel" placeholder="+55 47 99999-0000" value="' + (editando ? (cliente.whatsapp || '') : '') + '"></div>' +
+      '<div class="field"><label>Gestor responsável</label><input class="input" id="clGestor" placeholder="Ex.: Gabriel" value="' + (editando ? (cliente.gestor || '') : '') + '"></div>' +
+      '<div class="field full"><label>Contas vinculadas <span class="muted">(' + contas.length + ' disponíveis)</span></label>' +
+      '<input class="input" id="clFiltro" placeholder="Filtrar por nome..." style="margin-bottom:6px">' +
+      '<select class="select" id="clContas" multiple size="7">' + opts + '</select>' +
+      '<span class="hint">Segure Ctrl/Cmd para marcar várias.</span></div>' +
+      '</div>',
+      '<button class="btn btn-ghost" onclick="document.getElementById(\'modalScrim\').classList.remove(\'open\')">Cancelar</button>' +
+      '<button class="btn btn-primary" id="doCliente">' + I.check + 'Salvar cliente</button>'
+    );
+
+    $('#clFiltro').oninput = (e) => {
+      const q = e.target.value.toLowerCase();
+      [...$('#clContas').options].forEach((o) => { o.hidden = q && !o.textContent.toLowerCase().includes(q); });
+    };
+
+    $('#doCliente').onclick = () => {
+      const nome = $('#clNome').value.trim();
+      const whatsapp = $('#clWhats').value.trim();
+      if (!nome) return toast('Informe o nome do cliente.');
+      if (!whatsapp) return toast('Informe o WhatsApp do destinatário.');
+      const contasSel = [...$('#clContas').selectedOptions].map((o) => ({ id: o.value, nome: o.dataset.nome, plataforma: o.dataset.plat }));
+      fetch('/api/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome, whatsapp, gestor: $('#clGestor').value.trim(), contas: contasSel }) })
+        .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+        .then(({ ok, d }) => { if (!ok) throw new Error(d.error || 'Falha'); closeModal(); toast('Cliente salvo.'); onSaved && onSaved(); })
+        .catch((e) => toast(e.message || 'Falha ao salvar.'));
+    };
+  }).catch(() => toast('Falha ao carregar as contas.'));
 }
 
 /* ---- Configurações ---- */

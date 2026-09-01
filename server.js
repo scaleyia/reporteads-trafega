@@ -12,6 +12,7 @@ import { readSettings, writeSettings, clearApiKey, getApiKey, getModel, maskKey,
 import { getStatus as waStatus, connect as waConnect, disconnect as waDisconnect } from './lib/whatsapp.js';
 import { listSchedules, createSchedule, updateSchedule, removeSchedule, listRuns, runDue, getConfig, setConfig } from './lib/schedules.js';
 import { listAccounts, ingestAccount, removeAccount } from './lib/accounts.js';
+import { listClients, upsertClient, removeClient } from './lib/clients.js';
 import { syncMeta, META_ENABLED } from './lib/meta.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -76,44 +77,20 @@ app.get('/api/models', async (_req, res) => {
 });
 
 // ---------- Clientes ----------
-function readClients() {
-  try {
-    return JSON.parse(fs.readFileSync(CLIENTS_FILE, 'utf-8'));
-  } catch {
-    return [];
-  }
-}
-function writeClients(list) {
-  fs.writeFileSync(CLIENTS_FILE, JSON.stringify(list, null, 2));
-}
-
-app.get('/api/clients', (_req, res) => {
-  res.json(readClients());
+app.get('/api/clients', async (_req, res) => {
+  try { res.json(await listClients()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Cria ou atualiza um cliente (por nome). Body: {nome, gestor, semCustoPorConversao}
-app.post('/api/clients', (req, res) => {
-  const { nome, gestor, semCustoPorConversao } = req.body || {};
-  if (!nome || !nome.trim()) return res.status(400).json({ error: 'Nome obrigatório.' });
-  const list = readClients();
-  const i = list.findIndex((c) => c.nome.toLowerCase() === nome.trim().toLowerCase());
-  const entry = {
-    nome: nome.trim(),
-    gestor: (gestor || '').trim(),
-    semCustoPorConversao: !!semCustoPorConversao,
-  };
-  if (i >= 0) list[i] = { ...list[i], ...entry };
-  else list.push(entry);
-  list.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  writeClients(list);
-  res.json(entry);
+// Cria/atualiza um cliente. Body: {nome, whatsapp, gestor, contas:[{id,nome,plataforma}], ativo}
+app.post('/api/clients', async (req, res) => {
+  try { res.json(await upsertClient(req.body || {})); }
+  catch (err) { res.status(400).json({ error: err.message }); }
 });
 
-app.delete('/api/clients/:nome', (req, res) => {
-  const nome = decodeURIComponent(req.params.nome);
-  const list = readClients().filter((c) => c.nome.toLowerCase() !== nome.toLowerCase());
-  writeClients(list);
-  res.json({ ok: true });
+app.delete('/api/clients/:nome', async (req, res) => {
+  try { res.json(await removeClient(decodeURIComponent(req.params.nome))); }
+  catch (err) { res.status(400).json({ error: err.message }); }
 });
 
 // ---------- Conexão do WhatsApp (Evolution API) ----------
