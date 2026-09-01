@@ -872,6 +872,20 @@ function renderConfig(v) {
     '<a href="#/contas" style="text-decoration:underline;font-weight:700">Contas de anúncio</a>, e o <b>WhatsApp</b> em ' +
     '<a href="#/conexao" style="text-decoration:underline;font-weight:700">Conexão</a>. Aqui fica só a chave da OpenAI.</div></div>'));
 
+  // Logo da empresa (white-label)
+  const logoCard = el('<div class="card" style="margin-bottom:16px">' +
+    '<div class="card-head"><div class="logo" style="width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:var(--green-tint);color:var(--green-700)">' + I.info + '</div>' +
+    '<div><h3>Logo da empresa</h3><span class="sub">Aparece no topo da barra lateral</span></div></div>' +
+    '<div class="card-pad"><div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">' +
+    '<div style="width:150px;height:54px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(120deg,#0a5f11,#15ac20);display:flex;align-items:center;justify-content:center;overflow:hidden">' +
+    '<img id="logoPreviewImg" style="max-width:88%;max-height:78%;display:none" alt=""><span id="logoPreviewTxt" style="color:#fff;font-size:12px;opacity:.85">Prévia</span></div>' +
+    '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
+    '<label class="btn btn-primary" style="cursor:pointer">' + I.plus + 'Escolher imagem<input type="file" id="logoInput" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden></label>' +
+    '<button class="btn btn-ghost" id="logoRemove">' + I.trash + 'Remover</button></div></div>' +
+    '<span class="hint" style="display:block;margin-top:10px">PNG ou SVG com fundo transparente funciona melhor (a barra é escura). Máx. ~500KB.</span></div></div>');
+  v.appendChild(logoCard);
+  wireLogo(logoCard);
+
   // OpenAI — real
   const ai = credCard('ai', '', 'OpenAI',
     'Lê os dados e escreve o texto do relatório.',
@@ -881,6 +895,37 @@ function renderConfig(v) {
   v.appendChild(ai);
 
   wireOpenAI(ai);
+}
+
+function wireLogo(card) {
+  const img = $('#logoPreviewImg', card), txt = $('#logoPreviewTxt', card), input = $('#logoInput', card);
+  const show = (dataUri) => {
+    if (dataUri) { img.src = dataUri; img.style.display = 'block'; txt.style.display = 'none'; }
+    else { img.removeAttribute('src'); img.style.display = 'none'; txt.style.display = 'block'; }
+  };
+  fetch('/api/branding').then((r) => r.json()).then((b) => show(b && b.logo)).catch(() => {});
+  input.onchange = () => {
+    const f = input.files && input.files[0];
+    if (!f) return;
+    if (f.size > 500 * 1024) return toast('Imagem muito grande (máx. ~500KB).');
+    const rd = new FileReader();
+    rd.onload = () => {
+      const dataUri = rd.result;
+      fetch('/api/branding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ logo: dataUri }) })
+        .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+        .then(({ ok, d }) => { if (!ok) throw new Error(d.error || 'Falha'); show(dataUri); applyBranding(); toast('Logo salva!'); })
+        .catch((e) => toast(e.message || 'Falha ao salvar a logo.'));
+    };
+    rd.readAsDataURL(f);
+  };
+  $('#logoRemove', card).onclick = () => {
+    fetch('/api/branding', { method: 'DELETE' }).then(() => {
+      show(null);
+      const bi = document.getElementById('brandLogo');
+      if (bi) bi.src = '/assets/logo_white.png';
+      toast('Logo removida.');
+    }).catch(() => toast('Falha ao remover.'));
+  };
 }
 
 function credCard(cls, letter, nome, desc, fields, pillCls, pillTxt, glyph, isAi) {
@@ -1018,4 +1063,13 @@ function closeMobileNav() { $('#sidebar').classList.remove('open'); $('#scrimMob
 $('#menuBtn').addEventListener('click', () => { $('#sidebar').classList.add('open'); $('#scrimMobile').classList.add('show'); });
 $('#scrimMobile').addEventListener('click', closeMobileNav);
 
+/* Aplica a logo personalizada (white-label) na barra lateral, se houver. */
+function applyBranding() {
+  fetch('/api/branding').then((r) => r.json()).then((b) => {
+    const img = document.getElementById('brandLogo');
+    if (img && b && b.logo) img.src = b.logo;
+  }).catch(() => {});
+}
+
 navigate();
+applyBranding();
